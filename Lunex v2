@@ -1,6 +1,7 @@
 --=====================================================================
 -- Nebula Mobile UI Library
 -- Original: Nebula by f1nobe7650 — adapted for touch/mobile
+-- Full version with off-screen dragging, scrolling sidebar, tappable tabs
 --=====================================================================
 
 -- Variables
@@ -32,26 +33,23 @@ local gui_offset = gui_service:GetGuiInset().Y
 local floor, min, max, clamp, abs = math.floor, math.min, math.max, math.clamp, math.abs
 local insert, find, remove, concat = table.insert, table.find, table.remove, table.concat
 
-local IS_TOUCH    = uis.TouchEnabled
-local IS_MOBILE   = uis.TouchEnabled and not uis.KeyboardEnabled
+local IS_TOUCH     = uis.TouchEnabled
+local IS_MOBILE    = uis.TouchEnabled and not uis.KeyboardEnabled
 local SCROLL_THICK = IS_TOUCH and 4 or 2
 
 --=====================================================================
--- Input helpers (the mobile core of this adaptation)
+-- Input helpers
 --=====================================================================
 local function is_primary(input)
-    -- A "press" is either a mouse button or a touch.
     return input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch
 end
 
 local function is_move(input)
-    -- A "move" is either a mouse move or a touch drag.
     return input.UserInputType == Enum.UserInputType.MouseMovement
         or input.UserInputType == Enum.UserInputType.Touch
 end
 
--- Pointer location in viewport coordinates, for both mouse and touch.
 local function pointer_position()
     local p = uis:GetMouseLocation()
     return vec2(p.X, p.Y - gui_offset)
@@ -82,7 +80,7 @@ local config_flags  = library.config_flags
 local notifications = library.notifications
 
 --=====================================================================
--- Font import (falls back gracefully if the executor has no filesystem)
+-- Font import (falls back gracefully)
 --=====================================================================
 pcall(function()
     if isfile and writefile and getcustomasset and delfile then
@@ -110,7 +108,6 @@ pcall(function()
     end
 end)
 
--- Fallback so the library never crashes if the font didn't load.
 if not library.font then
     library.font = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Regular)
 end
@@ -198,7 +195,6 @@ function library:convert_enum(enum)
     return enum_table
 end
 
--- Pointer-in-frame test that works for mouse AND touch.
 function library:mouse_in_frame(uiobject)
     if not (uiobject and uiobject.Parent) then return false end
     local p = pointer_position()
@@ -216,13 +212,11 @@ function library:close_current_element(cfg)
 end
 
 --=====================================================================
--- Window dragging (touch + mouse)
+-- Window dragging — no viewport clamp, window can slide off-screen
 --=====================================================================
 function library:draggify(frame)
     local dragging = false
     local start_pos, start_size
-    -- track the exact input object we began with so multitouch doesn't
-    -- hijack the drag
     local active_input = nil
 
     local function begin(input)
@@ -245,19 +239,20 @@ function library:draggify(frame)
 
     library:connection(uis.InputChanged, function(input)
         if not dragging then return end
-        -- Accept movement for either the same input (touch) or a mouse move
         if input ~= active_input
             and input.UserInputType ~= Enum.UserInputType.MouseMovement then
             return
         end
         if not is_move(input) then return end
 
-        local vp = camera.ViewportSize
+        -- No clamp: the window can move partially or fully off any edge.
         local dx = input.Position.X - start_pos.X
         local dy = input.Position.Y - start_pos.Y
         frame.Position = dim2(
-            0, clamp(start_size.X.Offset + dx, 0, vp.X - frame.Size.X.Offset),
-            0, clamp(start_size.Y.Offset + dy, 0, vp.Y - frame.Size.Y.Offset)
+            start_size.X.Scale,
+            start_size.X.Offset + dx,
+            start_size.Y.Scale,
+            start_size.Y.Offset + dy
         )
         library:close_current_element(nil)
     end)
@@ -271,24 +266,24 @@ function library:draggify(frame)
 end
 
 --=====================================================================
--- Window resizing (touch + mouse)
+-- Window resizing — only a minimum size, can grow past the viewport
 --=====================================================================
 function library:resizify(frame)
     local handle = library:create("TextButton", {
-        Position            = dim2(1, -10, 1, -10),
-        BorderColor3        = rgb(0, 0, 0),
-        Size                = dim2(0, 22, 0, 22), -- larger touch target
-        BorderSizePixel     = 0,
-        BackgroundColor3    = rgb(255, 255, 255),
+        Position               = dim2(1, -14, 1, -14),
+        BorderColor3           = rgb(0, 0, 0),
+        Size                   = dim2(0, IS_TOUCH and 32 or 20, 0, IS_TOUCH and 32 or 20),
+        BorderSizePixel        = 0,
+        BackgroundColor3       = rgb(255, 255, 255),
         BackgroundTransparency = 1,
-        Text                = "",
-        Parent              = frame,
+        Text                   = "",
+        Parent                 = frame,
     })
 
-    local resizing   = false
+    local resizing      = false
     local start_size, start
-    local og_size    = frame.Size
-    local active_input = nil
+    local og_size       = frame.Size
+    local active_input  = nil
 
     handle.InputBegan:Connect(function(input)
         if not is_primary(input) then return end
@@ -312,13 +307,9 @@ function library:resizify(frame)
         end
         if not is_move(input) then return end
 
-        local vp = camera.ViewportSize
-        frame.Size = dim2(
-            start_size.X.Scale,
-            clamp(start_size.X.Offset + (input.Position.X - start.X), og_size.X.Offset, vp.X),
-            start_size.Y.Scale,
-            clamp(start_size.Y.Offset + (input.Position.Y - start.Y), og_size.Y.Offset, vp.Y)
-        )
+        local new_w = max(og_size.X.Offset, start_size.X.Offset + (input.Position.X - start.X))
+        local new_h = max(og_size.Y.Offset, start_size.Y.Offset + (input.Position.Y - start.Y))
+        frame.Size = dim2(start_size.X.Scale, new_w, start_size.Y.Scale, new_h)
     end)
 
     library:connection(uis.InputEnded, function(input)
@@ -399,27 +390,30 @@ function library:window(properties)
         tweening = false,
     }
 
-    -- Clamp size to viewport (mobile screens are small)
+    -- Mobile gets a smaller default so the window doesn't dominate the screen
     do
         local vp = camera.ViewportSize
-        local sx = min(cfg.size.X.Offset, vp.X - 20)
-        local sy = min(cfg.size.Y.Offset, vp.Y - 40)
-        cfg.size = dim2(0, sx, 0, sy)
+        local max_w, max_h
+        if IS_MOBILE then
+            max_w = vp.X * 0.82
+            max_h = vp.Y * 0.62
+        elseif IS_TOUCH then
+            max_w = vp.X * 0.88
+            max_h = vp.Y * 0.72
+        else
+            max_w = vp.X - 40
+            max_h = vp.Y - 60
+        end
+        cfg.size = dim2(0, min(cfg.size.X.Offset, max_w), 0, min(cfg.size.Y.Offset, max_h))
     end
 
     library.items = library:create("ScreenGui", {
-        Parent = coregui,
-        Name   = "\0",
-        Enabled = true,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        IgnoreGuiInset = true,
+        Parent = coregui, Name = "\0", Enabled = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = true,
     })
     library.other = library:create("ScreenGui", {
-        Parent = coregui,
-        Name   = "\0",
-        Enabled = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        IgnoreGuiInset = true,
+        Parent = coregui, Name = "\0", Enabled = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = true,
     })
 
     local items = cfg.items
@@ -436,8 +430,7 @@ function library:window(properties)
     items.window.Position = dim2(0, items.window.AbsolutePosition.X, 0, items.window.AbsolutePosition.Y)
 
     items.top_frame = library:create("Frame", {
-        Parent           = items.window,
-        Name             = "\0",
+        Parent           = items.window, Name = "\0",
         BorderColor3     = rgb(0, 0, 0),
         Size             = dim2(1, 0, 0, 45),
         BorderSizePixel  = 0,
@@ -445,32 +438,23 @@ function library:window(properties)
     })
 
     items.logo = library:create("ImageLabel", {
-        Parent            = items.top_frame,
-        Name              = "\0",
-        Image             = cfg.logo,
-        BackgroundTransparency = 1,
-        Position          = dim2(0, 16, 0, 7),
-        Size              = dim2(0, 32, 0, 32),
-        BorderSizePixel   = 0,
-        BackgroundColor3  = rgb(255, 255, 255),
+        Parent = items.top_frame, Name = "\0",
+        Image = cfg.logo, BackgroundTransparency = 1,
+        Position = dim2(0, 16, 0, 7), Size = dim2(0, 32, 0, 32),
+        BorderSizePixel = 0, BackgroundColor3 = rgb(255, 255, 255),
     })
 
     items.ui_title = library:create("TextLabel", {
         FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.SemiBold),
         TextColor3 = rgb(255, 255, 255),
-        Text = cfg.name,
-        Parent = items.top_frame,
-        Name = "\0",
-        BackgroundTransparency = 1,
-        Size = dim2(1, 0, 1, 0),
-        BorderSizePixel = 0,
-        TextSize = 35,
+        Text = cfg.name, Parent = items.top_frame, Name = "\0",
+        BackgroundTransparency = 1, Size = dim2(1, 0, 1, 0),
+        BorderSizePixel = 0, TextSize = 35,
         BackgroundColor3 = rgb(255, 255, 255),
     })
 
     items.inline = library:create("Frame", {
-        Parent = items.window,
-        Name = "\0",
+        Parent = items.window, Name = "\0",
         Position = dim2(0, 0, 0, 44),
         BorderColor3 = rgb(0, 0, 0),
         Size = dim2(0, 63, 1, -44),
@@ -478,30 +462,39 @@ function library:window(properties)
         BackgroundColor3 = rgb(0, 0, 0),
     })
 
-    items.tab_button_holder = library:create("Frame", {
-        Parent = items.inline,
-        Name = "\0",
+    -- ScrollingFrame so the sidebar never runs out of room
+    items.tab_button_holder = library:create("ScrollingFrame", {
+        Parent = items.inline, Name = "\0",
         Position = dim2(0, 1, 0, 1),
-        BorderColor3 = rgb(0, 0, 0),
         Size = dim2(1, -2, 1, -2),
+        BorderColor3 = rgb(0, 0, 0),
         BorderSizePixel = 0,
         BackgroundColor3 = rgb(14, 14, 14),
+        CanvasSize = dim2(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        ScrollBarThickness = 0,
+        ScrollBarImageTransparency = 1,
+        ElasticBehavior = Enum.ElasticBehavior.Never,
+        Active = true,
+        ClipsDescendants = true,
     })
 
     library:create("UIPadding", {
         Parent = items.tab_button_holder,
-        PaddingTop = dim(0, 37),
+        PaddingTop = dim(0, 20),
+        PaddingBottom = dim(0, 20),
     })
 
     library:create("UIListLayout", {
         Parent = items.tab_button_holder,
-        Padding = dim(0, IS_TOUCH and 12 or 24),
+        Padding = dim(0, IS_TOUCH and 8 or 18),
         SortOrder = Enum.SortOrder.LayoutOrder,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
     })
 
     items.page_holder = library:create("Frame", {
-        Parent = items.window,
-        Name = "\0",
+        Parent = items.window, Name = "\0",
         Position = dim2(0, 63, 0, 45),
         BorderColor3 = rgb(0, 0, 0),
         Size = dim2(1, -63, 1, -45),
@@ -509,11 +502,9 @@ function library:window(properties)
         BackgroundColor3 = rgb(12, 12, 12),
     })
 
-    -- Dragging / resizing
     library:draggify(items.window)
     library:resizify(items.window)
 
-    -- Fade-based show/hide
     function cfg.toggle_menu(bool)
         if cfg.tweening then return end
         cfg.tweening = true
@@ -547,36 +538,26 @@ function library:window(properties)
         end
     end
 
-    --=================================================================
-    -- Floating toggle button (essential on mobile)
-    --=================================================================
+    -- Floating toggle button
     local float_screen = library:create("ScreenGui", {
-        Parent = coregui,
-        Name = "\0",
-        Enabled = true,
+        Parent = coregui, Name = "\0", Enabled = true,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        IgnoreGuiInset = true,
-        DisplayOrder = 9999,
+        IgnoreGuiInset = true, DisplayOrder = 9999,
     })
     library.float_toggle = float_screen
 
     local float_btn = library:create("TextButton", {
-        Parent = float_screen,
-        Name = "\0",
-        Size = dim2(0, 44, 0, 44),     -- 44px = comfortable touch target
+        Parent = float_screen, Name = "\0",
+        Size = dim2(0, 44, 0, 44),
         Position = dim2(0, 16, 0.4, 0),
         BackgroundColor3 = rgb(20, 20, 20),
-        BorderSizePixel = 0,
-        AutoButtonColor = false,
-        Text = "≡",
-        TextColor3 = rgb(255, 255, 255),
-        TextSize = 22,
-        Font = Enum.Font.GothamBold,
+        BorderSizePixel = 0, AutoButtonColor = false,
+        Text = "≡", TextColor3 = rgb(255, 255, 255),
+        TextSize = 22, Font = Enum.Font.GothamBold,
     })
     library:create("UICorner", { Parent = float_btn, CornerRadius = dim(0, 22) })
     library:create("UIStroke", { Parent = float_btn, Color = rgb(60, 60, 60) })
 
-    -- Drag the toggle button around the screen
     do
         local dragging = false
         local start_pos, start_origin
@@ -598,9 +579,7 @@ function library:window(properties)
 
         library:connection(uis.InputChanged, function(input)
             if not dragging then return end
-            if input ~= active_input and input.UserInputType ~= Enum.UserInputType.MouseMovement then
-                return
-            end
+            if input ~= active_input and input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
             if not is_move(input) then return end
             local vp = camera.ViewportSize
             local dx = input.Position.X - start_pos.X
@@ -619,7 +598,6 @@ function library:window(properties)
             end
         end)
 
-        -- Tap = toggle (only fire if the finger didn't travel, so drag ≠ tap)
         local tap_start_time, tap_start_pos
         float_btn.InputBegan:Connect(function(input)
             if not is_primary(input) then return end
@@ -638,7 +616,6 @@ function library:window(properties)
         end)
     end
 
-    -- On desktop also allow the standard Insert / RightShift toggle.
     library:connection(uis.InputBegan, function(input, gpe)
         if gpe then return end
         if input.KeyCode == Enum.KeyCode.Insert or input.KeyCode == Enum.KeyCode.RightShift then
@@ -666,15 +643,18 @@ function library:Tab(properties)
         BackgroundTransparency = 1,
         Text = "",
         Size = dim2(1, 0, 0, 0),
-        BorderColor3 = rgb(0, 0, 0),
         BorderSizePixel = 0,
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundColor3 = rgb(255, 255, 255),
+        Active = true,
+        Selectable = true,
+        AutoButtonColor = false,
     })
 
     items.image = library:create("ImageLabel", {
         ImageColor3 = rgb(128, 128, 128),
-        Active = true,
+        Active = false,
+        Selectable = false,
         BorderColor3 = rgb(0, 0, 0),
         Parent = items.tab_button,
         Name = "\0",
@@ -683,19 +663,14 @@ function library:Tab(properties)
         Image = cfg.icon,
         BackgroundTransparency = 1,
         Position = dim2(0.5, 0, 0, 0),
-        Selectable = true,
         BorderSizePixel = 0,
         BackgroundColor3 = rgb(255, 255, 255),
     })
 
     items.tab = library:create("Frame", {
-        Parent = library.items,
-        BackgroundTransparency = 1,
-        Name = "\0",
-        Visible = false,
-        BorderColor3 = rgb(0, 0, 0),
-        Size = dim2(1, 0, 1, 0),
-        BorderSizePixel = 0,
+        Parent = library.items, BackgroundTransparency = 1,
+        Name = "\0", Visible = false, BorderColor3 = rgb(0, 0, 0),
+        Size = dim2(1, 0, 1, 0), BorderSizePixel = 0,
         BackgroundColor3 = rgb(255, 255, 255),
     })
 
@@ -716,14 +691,11 @@ function library:Tab(properties)
         PaddingLeft = dim(0, IS_TOUCH and 8 or 21),
     })
 
-    for _, column in ipairs({"left", "right"}) do
+    for _, column in ipairs({ "left", "right" }) do
         items[column] = library:create("Frame", {
-            Parent = items.tab,
-            BackgroundTransparency = 1,
-            Name = "\0",
-            BorderColor3 = rgb(0, 0, 0),
-            Size = dim2(0, 100, 0, 100),
-            BorderSizePixel = 0,
+            Parent = items.tab, BackgroundTransparency = 1,
+            Name = "\0", BorderColor3 = rgb(0, 0, 0),
+            Size = dim2(0, 100, 0, 100), BorderSizePixel = 0,
             BackgroundColor3 = rgb(8, 8, 8),
         })
     end
@@ -742,11 +714,14 @@ function library:Tab(properties)
         library:close_current_element(nil)
     end
 
-    items.tab_button.InputBegan:Connect(function(input)
+    local function activate(input)
         if is_primary(input) then
             cfg.open_tab()
         end
-    end)
+    end
+    items.tab_button.InputBegan:Connect(activate)
+    items.image.InputBegan:Connect(activate)
+    items.tab_button.MouseButton1Click:Connect(function() cfg.open_tab() end)
 
     if not self.selected_tab then
         cfg.open_tab()
@@ -860,7 +835,6 @@ function library:Section(properties)
     library:create("UIStroke", { Parent = items.text })
     library:create("UICorner", { Parent = items.section_outline, CornerRadius = dim(0, 0) })
 
-    -- Touch doesn't fire MouseEnter / MouseLeave, so we only wire these on desktop.
     if not IS_MOBILE then
         items.section_outline.MouseEnter:Connect(function()
             for _, instance in ipairs(items.section_outline:GetDescendants()) do
@@ -1073,7 +1047,6 @@ function library:Slider(options)
         if not is_primary(input) then return end
         cfg.dragging = true
         active_input = input
-        -- Jump to tap position immediately (essential on mobile)
         local rel = (input.Position.X - items.gradient_holder.AbsolutePosition.X)
                   / items.gradient_holder.AbsoluteSize.X
         cfg.set(((cfg.max - cfg.min) * clamp(rel, 0, 1)) + cfg.min)
@@ -1095,7 +1068,7 @@ function library:Slider(options)
     library:connection(uis.InputEnded, function(input)
         if input == active_input
             or input.UserInputType == Enum.UserInputType.MouseButton1
-            or (input.UserInputType == Enum.UserInputType.Touch and not input ~= active_input) then
+            or input.UserInputType == Enum.UserInputType.Touch then
             cfg.dragging = false
             active_input = nil
         end
@@ -1269,7 +1242,6 @@ function library:Dropdown(options)
         local ap = items.dropdown_outline.AbsolutePosition
         local asz = items.dropdown_outline.AbsoluteSize
         items.dropdown_holder.Size = dim2(0, asz.X, 0, 0)
-        -- Drop ABOVE the outline if it would run off the bottom of the screen.
         local vp = camera.ViewportSize
         local y
         if ap.Y + asz.Y + items.dropdown_holder.AbsoluteSize.Y > vp.Y and ap.Y > items.dropdown_holder.AbsoluteSize.Y then
@@ -1398,7 +1370,7 @@ function library:Label(options)
 end
 
 --=====================================================================
--- Colorpicker (touch-friendly dragging)
+-- Colorpicker
 --=====================================================================
 function library:Colorpicker(options)
     options = options or {}
@@ -1668,10 +1640,8 @@ function library:Colorpicker(options)
         cfg.callback(Color, a)
     end
 
-    -- Reads touch position if available, else mouse.
     local function read_pointer()
-        local p = pointer_position()
-        return p
+        return pointer_position()
     end
 
     function cfg.update_color()
@@ -1691,7 +1661,6 @@ function library:Colorpicker(options)
         if is_primary(input) then cfg.set_visible(not items.colorpicker_outline.Visible) end
     end)
 
-    -- Colourpicker internal drag: accept touch + mouse
     local function begin_drag(kind)
         return function(input)
             if not is_primary(input) then return end
@@ -1789,7 +1758,6 @@ function library:Textbox(options)
         TextXAlignment = Enum.TextXAlignment.Left,
         BorderSizePixel = 0,
         TextWrapped = true,
-        -- Allow typing on mobile
         ClearTextOnFocus = false,
         MultiLine = false,
     })
@@ -2000,7 +1968,6 @@ function library:Keybind(options)
         library.current = cfg
     end
 
-    -- Tap = rebind key. Long-press = open mode menu.
     local press_start
     items.text_label.InputBegan:Connect(function(input)
         if not is_primary(input) then return end
@@ -2208,7 +2175,7 @@ function library:list(properties)
 end
 
 --=====================================================================
--- Config tab (optional, requires file API)
+-- Config tab
 --=====================================================================
 function library:init_config(window)
     local textbox
@@ -2252,7 +2219,7 @@ function library:init_config(window)
 end
 
 --=====================================================================
--- Notifications (touch-tappable)
+-- Notifications
 --=====================================================================
 function notifications:refresh_notifs()
     local y = 50
@@ -2308,7 +2275,7 @@ function notifications:create_notification(options)
         PaddingRight = dim(0, 8), PaddingLeft = dim(0, 4),
         Parent = inline,
     })
-    local misc_text = library:create("TextLabel", {
+    library:create("TextLabel", {
         FontFace = library.font,
         Parent = inline,
         LineHeight = 1.75,
@@ -2364,7 +2331,6 @@ function notifications:create_notification(options)
         notifications:refresh_notifs()
     end)
 
-    -- Tap to dismiss on mobile, click on desktop
     outline.InputBegan:Connect(function(input)
         if not is_primary(input) then return end
         notifications.notifs[index] = nil
