@@ -1,13 +1,18 @@
 --[[
-    Celestite UI Library - V2.3 (Full: Outlines + Section Accents + Player List)
-    CSGO Gamesense/Splix Style | ScreenGui Based
-
+    Celestite UI Library - V2.4 (Full)
+    Features:
+      • CSGO Gamesense/Splix style window, tabs, sections with 3-layer outlines
+      • Full control set: Toggle, Slider, Dropdown, Button, TextBox, ColorPicker,
+        Keybind, Toggle:ColorPicker
+      • Theme manager, Config manager
+      • Player List with detail panel (avatar, id, display name, name, account age,
+        Prioritize / Friendly buttons) — matches CSGO-style player list
     Usage:
         local Library = loadstring(game:HttpGet("URL"))()
         local Window  = Library:Window("Title", UDim2.new(0, 620, 0, 460))
         local Tab     = Window:Tab("Main")
         local Section = Tab:Section("Group", "Left")
-        local PL      = Library:PlayerList({ Title = "Players" })
+        local PL      = Library:PlayerList({ Title = "Player List", Default = true })
 ]]
 
 local Players      = game:GetService("Players")
@@ -223,6 +228,8 @@ Library.Elements = {
     Buttons = {}, TextBoxes = {}, SectionAccents = {}, SectionHeaders = {},
     PlayerLists = {}, PlayerListHeaders = {}, PlayerListAccents = {},
     PlayerListCounts = {}, PlayerListScrolls = {}, PlayerListRows = {},
+    PlayerListDividers = {}, PlayerListDetails = {}, PlayerListThumbs = {},
+    PlayerListInfoLabels = {},
 }
 Library.Flags = {}
 
@@ -297,21 +304,24 @@ function Library:UpdateTheme()
     for _, out in pairs(Library.Elements.Outlines) do out.Color = Library.Theme.Outline end
     for _, inl in pairs(Library.Elements.Inlines)  do inl.Color = Library.Theme.Inline  end
 
-    -- Player list theme hooks
-    for _, pl in pairs(Library.Elements.PlayerLists)        do pl.BackgroundColor3 = Library.Theme.DarkBackground end
-    for _, ph in pairs(Library.Elements.PlayerListHeaders)  do ph.BackgroundColor3 = Library.Theme.HeaderBar      end
-    for _, pa in pairs(Library.Elements.PlayerListAccents)  do pa.BackgroundColor3 = Library.Theme.Accent         end
-    for _, pc in pairs(Library.Elements.PlayerListCounts)   do pc.TextColor3        = Library.Theme.Accent         end
-    for _, ps in pairs(Library.Elements.PlayerListScrolls)  do ps.ScrollBarImageColor3 = Library.Theme.Accent     end
+    -- Player list
+    for _, pl in pairs(Library.Elements.PlayerLists)         do pl.BackgroundColor3      = Library.Theme.DarkBackground end
+    for _, ph in pairs(Library.Elements.PlayerListHeaders)   do ph.BackgroundColor3      = Library.Theme.HeaderBar      end
+    for _, pa in pairs(Library.Elements.PlayerListAccents)   do pa.BackgroundColor3      = Library.Theme.Accent         end
+    for _, pc in pairs(Library.Elements.PlayerListCounts)    do pc.TextColor3            = Library.Theme.InactiveText   end
+    for _, ps in pairs(Library.Elements.PlayerListScrolls)   do ps.ScrollBarImageColor3  = Library.Theme.Accent         end
+    for _, pd in pairs(Library.Elements.PlayerListDetails)   do pd.BackgroundColor3      = Library.Theme.Background     end
+    for _, pt in pairs(Library.Elements.PlayerListThumbs)    do pt.BackgroundColor3      = Library.Theme.SectionBackground end
+    for _, pdv in pairs(Library.Elements.PlayerListDividers) do pdv.BackgroundColor3     = Library.Theme.Inline         end
+    for _, pil in pairs(Library.Elements.PlayerListInfoLabels) do pil.TextColor3         = Library.Theme.Text           end
     for _, pr in pairs(Library.Elements.PlayerListRows) do
         if pr.IsLocal then
-            pr.Name.TextColor3 = Library.Theme.Accent
-        elseif pr.TeamColor then
-            pr.Name.TextColor3 = pr.TeamColor
+            pr.Name.TextColor3   = Library.Theme.Text
+            pr.Status.TextColor3 = Library.Theme.Accent
         else
-            pr.Name.TextColor3 = Library.Theme.Text
+            pr.Name.TextColor3   = Library.Theme.Text
+            pr.Status.TextColor3 = Library.Theme.InactiveText
         end
-        pr.Info.TextColor3 = Library.Theme.InactiveText
     end
 end
 
@@ -522,12 +532,6 @@ function Library:Window(title, size)
 
     MakeDraggable(Main, TitleBar)
 
-    local function ResizeTabs()
-        for _, t in pairs(Window.Tabs) do
-            t.Button.Size = UDim2.new(1 / #Window.Tabs, 0, 1, 0)
-        end
-    end
-
     function Window:Tab(name)
         local Tab = {}
         local TabButton = Create("TextButton", {
@@ -606,7 +610,7 @@ function Library:Window(title, size)
         if #Window.Tabs == 1 then Activate() end
 
         -- ============================================================
-        -- SECTION (with full outline + header bar + accent underline)
+        -- SECTION
         -- ============================================================
         function Tab:Section(sectionName, side)
             local Section = {}
@@ -806,7 +810,7 @@ function Library:Window(title, size)
                 return CPObj
             end
 
-            -- Toggle (click-region fix retained)
+            -- Toggle (with click-region fix)
             function Section:Toggle(opts)
                 local state = opts.Default or false
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
@@ -1232,21 +1236,31 @@ function Library:Window(title, size)
 end
 
 -------------------------------------------------
--- PLAYER LIST (floating draggable panel)
+-- PLAYER LIST (image-style: rows + detail panel)
 -------------------------------------------------
 function Library:PlayerList(opts)
     opts = opts or {}
     local title         = opts.Title or "Player List"
     local defaultOn     = opts.Default or false
     local showDistance  = opts.ShowDistance ~= false
-    local showTeamColor = opts.ShowTeamColor ~= false
     local refreshRate   = opts.RefreshRate or 0.5
-    local rowHeight     = 16
+    local rowHeight     = 17
+    local detailHeight  = 98
+
+    local Meta = {}
+    local function getMeta(player)
+        if not Meta[player] then
+            Meta[player] = { prioritize = false, friendly = false }
+        end
+        return Meta[player]
+    end
+
+    local SelectedPlayer = nil
 
     local Panel = Create("Frame", {
         Name = "CelestitePlayerList",
-        Size = UDim2.new(0, 220, 0, 320),
-        Position = UDim2.new(0, 20, 0.5, -160),
+        Size = UDim2.new(0, 260, 0, 460),
+        Position = UDim2.new(0, 20, 0.5, -230),
         BackgroundColor3 = Library.Theme.DarkBackground,
         BorderSizePixel = 0,
         Visible = defaultOn,
@@ -1257,9 +1271,10 @@ function Library:PlayerList(opts)
     ApplyCelestiteStyle(Panel)
     table.insert(Library.Elements.PlayerLists, Panel)
 
+    -- Header
     local HeaderBar = Create("Frame", {
         Name = "HeaderBar",
-        Size = UDim2.new(1, -2, 0, 20),
+        Size = UDim2.new(1, -2, 0, 22),
         Position = UDim2.new(0, 1, 0, 1),
         BackgroundColor3 = Library.Theme.HeaderBar,
         BorderSizePixel = 0,
@@ -1271,7 +1286,7 @@ function Library:PlayerList(opts)
     Create("TextLabel", {
         Text = title,
         Size = UDim2.new(1, -60, 1, 0),
-        Position = UDim2.new(0, 6, 0, 0),
+        Position = UDim2.new(0, 8, 0, 0),
         BackgroundTransparency = 1,
         FontFace = true,
         TextSize = Library.Config.FontSize,
@@ -1290,7 +1305,7 @@ function Library:PlayerList(opts)
         BackgroundTransparency = 1,
         FontFace = true,
         TextSize = Library.Config.FontSize,
-        TextColor3 = Library.Theme.Accent,
+        TextColor3 = Library.Theme.InactiveText,
         TextXAlignment = Enum.TextXAlignment.Right,
         ZIndex = 5,
         Parent = HeaderBar,
@@ -1301,7 +1316,7 @@ function Library:PlayerList(opts)
 
     local AccentUnderline = Create("Frame", {
         Size = UDim2.new(1, -2, 0, 1),
-        Position = UDim2.new(0, 1, 0, 21),
+        Position = UDim2.new(0, 1, 0, 23),
         BackgroundColor3 = Library.Theme.Accent,
         BorderSizePixel = 0,
         ZIndex = 6,
@@ -1309,10 +1324,121 @@ function Library:PlayerList(opts)
     })
     table.insert(Library.Elements.PlayerListAccents, AccentUnderline)
 
+    -- Detail panel
+    local DetailPanel = Create("Frame", {
+        Name = "DetailPanel",
+        Size = UDim2.new(1, -6, 0, detailHeight),
+        Position = UDim2.new(0, 3, 1, -detailHeight - 3),
+        BackgroundColor3 = Library.Theme.Background,
+        BorderSizePixel = 0,
+        ZIndex = 7,
+        Parent = Panel,
+    })
+    ApplyCelestiteStyle(DetailPanel)
+    table.insert(Library.Elements.PlayerListDetails, DetailPanel)
+
+    local Thumb = Create("ImageLabel", {
+        Name = "Thumb",
+        Size = UDim2.new(0, 64, 0, 64),
+        Position = UDim2.new(0, 6, 0, 6),
+        BackgroundColor3 = Library.Theme.SectionBackground,
+        BorderSizePixel = 0,
+        Image = "",
+        ScaleType = Enum.ScaleType.Crop,
+        ZIndex = 9,
+        Parent = DetailPanel,
+    })
+    AddOutline(Thumb)
+    table.insert(Library.Elements.PlayerListThumbs, Thumb)
+
+    local InfoHolder = Create("Frame", {
+        Name = "Info",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 76, 0, 4),
+        Size = UDim2.new(1, -156, 1, -8),
+        ZIndex = 9,
+        Parent = DetailPanel,
+    })
+
+    local function mkInfoRow(idx)
+        local row = Create("TextLabel", {
+            Text = "",
+            Size = UDim2.new(1, 0, 0, 14),
+            Position = UDim2.new(0, 0, 0, (idx - 1) * 15),
+            BackgroundTransparency = 1,
+            FontFace = true,
+            TextSize = Library.Config.FontSize,
+            TextColor3 = Library.Theme.Text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            ZIndex = 10,
+            Parent = InfoHolder,
+            TextStrokeTransparency = 0,
+            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+        })
+        table.insert(Library.Elements.PlayerListInfoLabels, row)
+        return row
+    end
+
+    local IdRow   = mkInfoRow(1)
+    local NameRow = mkInfoRow(2)
+    local UserRow = mkInfoRow(3)
+    local AgeRow  = mkInfoRow(4)
+
+    local ButtonsCol = Create("Frame", {
+        Name = "Buttons",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -84, 0, 6),
+        Size = UDim2.new(0, 78, 1, -12),
+        ZIndex = 9,
+        Parent = DetailPanel,
+    })
+    Create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Vertical,
+        VerticalAlignment = Enum.VerticalAlignment.Top,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 4),
+        Parent = ButtonsCol,
+    })
+
+    local function mkActionButton(text, order)
+        local Btn = Create("TextButton", {
+            Text = "",
+            Size = UDim2.new(1, 0, 0, 38),
+            BackgroundColor3 = Library.Theme.SectionBackground,
+            BorderSizePixel = 0,
+            AutoButtonColor = false,
+            LayoutOrder = order,
+            ZIndex = 10,
+            Parent = ButtonsCol,
+        })
+        ApplyCelestiteStyle(Btn)
+        Create("TextLabel", {
+            Text = text,
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            FontFace = true,
+            TextSize = Library.Config.FontSize,
+            TextColor3 = Library.Theme.Text,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            ZIndex = 11,
+            Parent = Btn,
+            TextStrokeTransparency = 0,
+            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+        })
+        table.insert(Library.Elements.Buttons, Btn)
+        return Btn
+    end
+
+    local PriorityBtn = mkActionButton("Prioritize", 1)
+    local FriendlyBtn = mkActionButton("Friendly", 2)
+
+    -- Scrollable list
     local ListHolder = Create("ScrollingFrame", {
         Name = "Players",
-        Size = UDim2.new(1, -6, 1, -27),
-        Position = UDim2.new(0, 3, 0, 24),
+        Size = UDim2.new(1, -6, 1, -(detailHeight + 32)),
+        Position = UDim2.new(0, 3, 0, 25),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.new(0, 0, 0, 0),
@@ -1325,7 +1451,7 @@ function Library:PlayerList(opts)
     table.insert(Library.Elements.PlayerListScrolls, ListHolder)
     Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 1),
+        Padding = UDim.new(0, 0),
         Parent = ListHolder,
     })
 
@@ -1333,18 +1459,41 @@ function Library:PlayerList(opts)
 
     local Rows = {}
 
+    local function UpdateDetail(player)
+        if not player or not player.Parent then
+            Thumb.Image  = ""
+            IdRow.Text   = "Id : -"
+            NameRow.Text = "Display Name : -"
+            UserRow.Text = "Name : -"
+            AgeRow.Text  = "Account Age : -"
+            return
+        end
+
+        Thumb.Image  = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
+        IdRow.Text   = "Id : " .. player.UserId
+        NameRow.Text = "Display Name : " .. (player.DisplayName or player.Name)
+        UserRow.Text = "Name : " .. player.Name
+        AgeRow.Text  = "Account Age : " .. (player.AccountAge or 0)
+
+        local meta = Meta[player] or { prioritize = false, friendly = false }
+        PriorityBtn.BackgroundColor3 = meta.prioritize and Library.Theme.Accent or Library.Theme.SectionBackground
+        FriendlyBtn.BackgroundColor3 = meta.friendly and Library.Theme.Accent or Library.Theme.SectionBackground
+    end
+
     local function CreateRow(player)
         local row = Create("Frame", {
             Name = player.Name,
             Size = UDim2.new(1, 0, 0, rowHeight),
-            BackgroundTransparency = 1,
+            BackgroundColor3 = Library.Theme.DarkBackground,
+            BorderSizePixel = 0,
             ZIndex = 5,
             Parent = ListHolder,
         })
+
         local nameL = Create("TextLabel", {
             Text = player.Name,
-            Size = UDim2.new(1, -50, 1, 0),
-            Position = UDim2.new(0, 4, 0, 0),
+            Size = UDim2.new(1, -100, 1, 0),
+            Position = UDim2.new(0, 6, 0, 0),
             BackgroundTransparency = 1,
             FontFace = true,
             TextSize = Library.Config.FontSize,
@@ -1355,10 +1504,11 @@ function Library:PlayerList(opts)
             TextStrokeTransparency = 0,
             TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
         })
-        local infoL = Create("TextLabel", {
-            Text = "",
-            Size = UDim2.new(0, 44, 1, 0),
-            Position = UDim2.new(1, -46, 0, 0),
+
+        local statusL = Create("TextLabel", {
+            Text = "None",
+            Size = UDim2.new(0, 90, 1, 0),
+            Position = UDim2.new(1, -94, 0, 0),
             BackgroundTransparency = 1,
             FontFace = true,
             TextSize = Library.Config.FontSize,
@@ -1369,66 +1519,109 @@ function Library:PlayerList(opts)
             TextStrokeTransparency = 0,
             TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
         })
-        return row, nameL, infoL
+
+        local divider = Create("Frame", {
+            Size = UDim2.new(1, 0, 0, 1),
+            Position = UDim2.new(0, 0, 1, -1),
+            BackgroundColor3 = Library.Theme.Inline,
+            BorderSizePixel = 0,
+            ZIndex = 6,
+            Parent = row,
+        })
+        table.insert(Library.Elements.PlayerListDividers, divider)
+
+        local click = Create("TextButton", {
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            Text = "",
+            TextTransparency = 1,
+            AutoButtonColor = false,
+            ZIndex = 7,
+            Parent = row,
+        })
+        click.MouseButton1Click:Connect(function()
+            SelectedPlayer = player
+            UpdateDetail(player)
+            for p, r in pairs(Rows) do
+                if p == player then
+                    r.Row.BackgroundColor3 = Library.Theme.SectionBackground
+                else
+                    r.Row.BackgroundColor3 = Library.Theme.DarkBackground
+                end
+            end
+        end)
+
+        local entry = { Row = row, Name = nameL, Status = statusL, Divider = divider }
+        table.insert(Library.Elements.PlayerListRows, entry)
+        return entry
     end
 
     local function Refresh()
         local players = Players:GetPlayers()
-        table.sort(players, function(a, b) return a.Name:lower() < b.Name:lower() end)
+        table.sort(players, function(a, b)
+            local aLocal = (a == Players.LocalPlayer)
+            local bLocal = (b == Players.LocalPlayer)
+            if aLocal ~= bLocal then return aLocal end
+            return a.Name:lower() < b.Name:lower()
+        end)
 
         for player, data in pairs(Rows) do
             if not player.Parent or not table.find(players, player) then
                 data.Row:Destroy()
                 Rows[player] = nil
+                if SelectedPlayer == player then
+                    SelectedPlayer = Players.LocalPlayer
+                    UpdateDetail(SelectedPlayer)
+                end
             end
         end
 
         for i, player in ipairs(players) do
             local data = Rows[player]
             if not data then
-                local row, nameL, infoL = CreateRow(player)
-                data = { Row = row, Name = nameL, Info = infoL }
+                data = CreateRow(player)
                 Rows[player] = data
-                table.insert(Library.Elements.PlayerListRows, data)
             end
 
             data.Row.LayoutOrder = i
             data.IsLocal = (player == Players.LocalPlayer)
-
-            if showTeamColor and player.Team then
-                data.TeamColor = player.TeamColor.Color
-            else
-                data.TeamColor = nil
-            end
+            data.Name.Text = player.Name
 
             if data.IsLocal then
-                data.Name.TextColor3 = Library.Theme.Accent
-                data.Name.Text = player.Name .. " (you)"
+                data.Status.Text = "Local Player"
+                data.Status.TextColor3 = Library.Theme.Accent
             else
-                data.Name.Text = player.Name
-                data.Name.TextColor3 = data.TeamColor or Library.Theme.Text
+                if showDistance then
+                    local lp = Players.LocalPlayer
+                    local lhrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+                    local thrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                    if lhrp and thrp then
+                        data.Status.Text = math.floor((thrp.Position - lhrp.Position).Magnitude) .. "m"
+                    else
+                        data.Status.Text = "None"
+                    end
+                else
+                    data.Status.Text = "None"
+                end
+                data.Status.TextColor3 = Library.Theme.InactiveText
             end
 
-            if showDistance then
-                local lp = Players.LocalPlayer
-                local lhrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-                local thrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                if lhrp and thrp then
-                    local dist = math.floor((thrp.Position - lhrp.Position).Magnitude)
-                    data.Info.Text = tostring(dist) .. "m"
-                else
-                    data.Info.Text = "--"
-                end
+            if player == SelectedPlayer then
+                data.Row.BackgroundColor3 = Library.Theme.SectionBackground
+            else
+                data.Row.BackgroundColor3 = Library.Theme.DarkBackground
             end
         end
 
         CountLabel.Text = "#" .. #players
-        ListHolder.CanvasSize = UDim2.new(0, 0, 0, #players * (rowHeight + 1))
+        ListHolder.CanvasSize = UDim2.new(0, 0, 0, #players * rowHeight)
     end
 
+    SelectedPlayer = Players.LocalPlayer
     Refresh()
+    UpdateDetail(SelectedPlayer)
 
-    local connAdded = Players.PlayerAdded:Connect(Refresh)
+    local connAdded   = Players.PlayerAdded:Connect(Refresh)
     local connRemoved = Players.PlayerRemoving:Connect(Refresh)
 
     local running = true
@@ -1437,6 +1630,22 @@ function Library:PlayerList(opts)
             Refresh()
             task.wait(refreshRate)
         end
+    end)
+
+    PriorityBtn.MouseButton1Click:Connect(function()
+        if not SelectedPlayer or not SelectedPlayer.Parent then return end
+        local meta = getMeta(SelectedPlayer)
+        meta.prioritize = not meta.prioritize
+        UpdateDetail(SelectedPlayer)
+        if opts.OnPrioritize then opts.OnPrioritize(SelectedPlayer, meta.prioritize) end
+    end)
+
+    FriendlyBtn.MouseButton1Click:Connect(function()
+        if not SelectedPlayer or not SelectedPlayer.Parent then return end
+        local meta = getMeta(SelectedPlayer)
+        meta.friendly = not meta.friendly
+        UpdateDetail(SelectedPlayer)
+        if opts.OnFriendly then opts.OnFriendly(SelectedPlayer, meta.friendly) end
     end)
 
     local Obj = {}
@@ -1448,9 +1657,16 @@ function Library:PlayerList(opts)
     function Obj:IsVisible()   return Panel.Visible  end
     function Obj:SetVisible(v) Panel.Visible = v and true or false end
     function Obj:Refresh()     Refresh() end
+    function Obj:GetSelected() return SelectedPlayer end
+    function Obj:SetSelected(player)
+        SelectedPlayer = player
+        UpdateDetail(player)
+        Refresh()
+    end
+    function Obj:GetMeta(player) return Meta[player] end
     function Obj:Destroy()
         running = false
-        if connAdded then connAdded:Disconnect() end
+        if connAdded   then connAdded:Disconnect()   end
         if connRemoved then connRemoved:Disconnect() end
         Panel:Destroy()
     end
