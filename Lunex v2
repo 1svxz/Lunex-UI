@@ -1,20 +1,14 @@
 --[[
-    Celestite UI Library - V2.6 (Full, Full-Width Sections + Edge Drag)
+    Celestite UI Library - V2.7 (Full, Locked Fill Tabs + TP / Spectate)
     Features:
       • CSGO Gamesense/Splix style window, tabs, sections with 3-layer outlines
       • Full control set: Toggle, Slider, Dropdown, Button, TextBox, ColorPicker,
         Keybind, Toggle:ColorPicker
       • Theme manager, Config manager
       • Section:PlayerList() — CSGO-style player list embedded inside a section
-      • Tab:Section("X", "full", { Fill = true }) — full-tab sections
+        Detail panel buttons: TP (button) + Spectate (toggle)
+      • A tab with a "full" + Fill section is locked — no more sections can be added
       • Window edges are draggable (not a resize feature)
-    Usage:
-        local Library = loadstring(game:HttpGet("URL"))()
-        local Window  = Library:Window("Title", UDim2.new(0, 620, 0, 460))
-        local Tab     = Window:Tab("Main")
-        local Section = Tab:Section("Group", "Left")
-        local FullSec = Tab:Section("Player List", "full", { Fill = true })
-        local PL      = FullSec:PlayerList({ ShowDistance = false })
 ]]
 
 local Players      = game:GetService("Players")
@@ -53,7 +47,7 @@ end
 local b64decode = (rawget and rawget(_G, "base64_decode")) or (crypt and crypt.base64decode) or decodeBase64
 
 local function IsWithin(obj, input)
-    local pos = obj.AbsolutePosition
+    local pos  = obj.AbsolutePosition
     local size = obj.AbsoluteSize
     local mPos = input.Position
     return mPos.X >= pos.X and mPos.X <= pos.X + size.X and mPos.Y >= pos.Y and mPos.Y <= pos.Y + size.Y
@@ -69,7 +63,6 @@ local function MakeDraggable(frame, handle)
             dragging = true
             dragStart = input.Position
             startPos = frame.Position
-
             local changedConn
             changedConn = input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
@@ -122,27 +115,23 @@ local function LoadFonts()
         {"VerdanaBold", "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Verdana%20Bold.txt"},
         {"Tahoma", "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Tahoma.txt"}
     }
-
     for _, f in pairs(fonts) do
         local name, url = f[1], f[2]
         local success, err = pcall(function()
-            local ttf_path = name .. ".ttf"
+            local ttf_path  = name .. ".ttf"
             local json_path = name .. ".json"
-
             if not isfile(ttf_path) then
                 writefile(ttf_path, b64decode(game:HttpGet(url)))
             end
-
             if not isfile(json_path) then
                 local data = {
-                    name = name,
+                    name  = name,
                     faces = {
                         { name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(ttf_path) }
                     }
                 }
                 writefile(json_path, HttpService:JSONEncode(data))
             end
-
             LoadedFonts[name] = Font.new(getcustomasset(json_path), Enum.FontWeight.Regular)
         end)
         if not success then warn("Failed to load font " .. name .. ": " .. tostring(err)) end
@@ -241,32 +230,26 @@ function Library:UpdateTheme()
         win.Content.BackgroundColor3  = Library.Theme.Background
         win.AccentLine.BackgroundColor3 = Library.Theme.Accent
     end
-
     for _, sec in pairs(Library.Elements.Sections) do
         sec.Frame.BackgroundColor3 = Library.Theme.DarkBackground
         sec.Header.TextColor3      = Library.Theme.Text
     end
-
     for _, hdr in pairs(Library.Elements.SectionHeaders) do
         hdr.BackgroundColor3 = Library.Theme.HeaderBar
     end
-
     for _, acc in pairs(Library.Elements.SectionAccents) do
         acc.BackgroundColor3 = Library.Theme.Accent
     end
-
     for _, tog in pairs(Library.Elements.Toggles) do
         tog.Box.BackgroundColor3 = tog.GetState() and Library.Theme.Accent or Library.Theme.SectionBackground
         tog.Label.TextColor3     = tog.GetState() and Library.Theme.Text or Library.Theme.InactiveText
     end
-
     for _, sli in pairs(Library.Elements.Sliders) do
         sli.Fill.BackgroundColor3 = Library.Theme.Accent
         sli.Label.TextColor3 = Library.Theme.Text
         sli.Value.TextColor3 = Library.Theme.Text
         if sli.Back then sli.Back.BackgroundColor3 = Library.Theme.SectionBackground end
     end
-
     for _, drop in pairs(Library.Elements.Dropdowns) do
         if drop.Box then drop.Box.BackgroundColor3 = Library.Theme.SectionBackground end
         if drop.Label then drop.Label.TextColor3 = Library.Theme.Text end
@@ -278,30 +261,24 @@ function Library:UpdateTheme()
             if btn:IsA("TextButton") then btn.BackgroundColor3 = Library.Theme.DarkBackground end
         end
     end
-
     for _, cp in pairs(Library.Elements.ColorPickers) do
         cp.Frame.BackgroundColor3 = Library.Theme.SectionBackground
         if cp.Picker then cp.Picker.BackgroundColor3 = Library.Theme.DarkBackground end
     end
-
     for _, tab in pairs(Library.Elements.Tabs) do
         tab.Accent.BackgroundColor3 = Library.Theme.Accent
         Tween(tab.Button, {TextColor3 = tab.IsActive() and Library.Theme.Text or Library.Theme.InactiveText})
     end
-
     for _, lab in pairs(Library.Elements.Labels) do
         lab.TextColor3 = Library.Theme.Text
     end
-
     for _, btn in pairs(Library.Elements.Buttons) do
         btn.BackgroundColor3 = Library.Theme.SectionBackground
     end
-
     for _, txt in pairs(Library.Elements.TextBoxes) do
         txt.Box.BackgroundColor3 = Library.Theme.SectionBackground
         txt.Input.TextColor3     = Library.Theme.Text
     end
-
     for _, out in pairs(Library.Elements.Outlines) do out.Color = Library.Theme.Outline end
     for _, inl in pairs(Library.Elements.Inlines)  do inl.Color = Library.Theme.Inline  end
 
@@ -319,6 +296,10 @@ function Library:UpdateTheme()
             pr.Name.TextColor3   = Library.Theme.Text
             pr.Status.TextColor3 = Library.Theme.InactiveText
         end
+    end
+    -- Spectate button state (uses accent when ON)
+    for _, pb in pairs(Library.Elements.PlayerListActionBtns) do
+        pb.Btn.BackgroundColor3 = pb.IsActive() and Library.Theme.Accent or Library.Theme.SectionBackground
     end
 end
 
@@ -348,7 +329,6 @@ local function AddInlineOutline(inst)
     inner.BorderSizePixel = 0
     inner.ZIndex = inst.ZIndex
     inner.Parent = inst
-
     local inl = Instance.new("UIStroke")
     inl.Name = "Inline"
     inl.Color = Library.Theme.Inline
@@ -378,7 +358,7 @@ NotifList.Parent = NotifHolder
 
 function Library:Notification(opts)
     opts = opts or {}
-    local text = opts.Text or "Notification"
+    local text     = opts.Text or "Notification"
     local duration = opts.Duration or 5
 
     local Holder = Instance.new("Frame")
@@ -529,15 +509,14 @@ function Library:Window(title, size)
 
     MakeDraggable(Main, TitleBar)
 
-    -- Edge drag handles — 5px thick, invisible, one per side of the window.
-    -- Grabbing any edge drags the whole window (does not resize).
+    -- Edge drag handles — dragging any of them moves the whole window
     do
         local EDGE = 5
         local edgeSpecs = {
-            { pos = UDim2.new(0, 0, 0, -EDGE),                 size = UDim2.new(1, 0, 0, EDGE) }, -- top
-            { pos = UDim2.new(0, 0, 1, 0),                     size = UDim2.new(1, 0, 0, EDGE) }, -- bottom
-            { pos = UDim2.new(0, -EDGE, 0, 0),                 size = UDim2.new(0, EDGE, 1, 0) }, -- left
-            { pos = UDim2.new(1, 0, 0, 0),                     size = UDim2.new(0, EDGE, 1, 0) }, -- right
+            { pos = UDim2.new(0, 0, 0, -EDGE), size = UDim2.new(1, 0, 0, EDGE) },
+            { pos = UDim2.new(0, 0, 1, 0),     size = UDim2.new(1, 0, 0, EDGE) },
+            { pos = UDim2.new(0, -EDGE, 0, 0), size = UDim2.new(0, EDGE, 1, 0) },
+            { pos = UDim2.new(1, 0, 0, 0),     size = UDim2.new(0, EDGE, 1, 0) },
         }
         for _, spec in ipairs(edgeSpecs) do
             local handle = Create("TextButton", {
@@ -616,7 +595,6 @@ function Library:Window(title, size)
         })
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = RightColumn })
 
-        -- Full-width column (used by "full" sections)
         local FullColumn = Create("Frame", {
             Name = "Full",
             Size = UDim2.new(1, -12, 1, -12),
@@ -627,6 +605,9 @@ function Library:Window(title, size)
             ClipsDescendants = false
         })
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = FullColumn })
+
+        -- Locked-tab flag: once a fill section is added, no more can be added.
+        Tab._locked = false
 
         local function Activate()
             for _, t in pairs(Window.Tabs) do
@@ -645,13 +626,24 @@ function Library:Window(title, size)
         if #Window.Tabs == 1 then Activate() end
 
         -- ============================================================
-        -- SECTION (with optional full-width + fill)
+        -- SECTION
         -- ============================================================
         function Tab:Section(sectionName, side, opts)
             opts = opts or {}
+
+            -- Prevent adding extra sections to a tab that already has a fill section
+            if Tab._locked then
+                warn(("[Celestite] Cannot add section '%s' — tab '%s' is locked by its full-fill section."):format(tostring(sectionName), tostring(TabButton.Name)))
+                return nil
+            end
+
             local Section = {}
             local isFull = (side and side:lower() == "full") == true
             local fill   = isFull and (opts.Fill ~= false) or (opts.Fill == true)
+
+            if fill then
+                Tab._locked = true
+            end
 
             local parent
             if side and side:lower() == "right" then
@@ -752,11 +744,7 @@ function Library:Window(title, size)
                 local Input = Create("TextBox", { Text = topts.Default or "", PlaceholderText = topts.Placeholder or "...", Size = UDim2.new(1, -10, 1, 0), Position = UDim2.new(0, 5, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.TextBoxes, { Box = Box, Input = Input })
                 Input.FocusLost:Connect(function() if topts.Callback then topts.Callback(Input.Text) end end)
-                local Obj = {
-                    GetText = function() return Input.Text end,
-                    SetText = function(t) Input.Text = t end,
-                    Set = function(t) Input.Text = t end
-                }
+                local Obj = { GetText = function() return Input.Text end, SetText = function(t) Input.Text = t end, Set = function(t) Input.Text = t end }
                 Library.Flags[topts.Flag or topts.Name] = Obj
                 return Obj
             end
@@ -808,9 +796,7 @@ function Library:Window(title, size)
                     if pickerConn then pickerConn:Disconnect(); pickerConn = nil end
                 end
                 CPBtn.MouseButton1Click:Connect(function()
-                    if Picker.Visible then
-                        ClosePicker()
-                    else
+                    if Picker.Visible then ClosePicker() else
                         UpdatePos()
                         Picker.Visible = true
                         pickerConn = UIS.InputBegan:Connect(function(input)
@@ -863,7 +849,6 @@ function Library:Window(title, size)
                 ApplyCelestiteStyle(Box)
                 local Label = Create("TextLabel", { Text = topts.Name or "Toggle", Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
-
                 local RightSide = Create("Frame", { Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, ZIndex = 10, Parent = Holder })
                 Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = RightSide })
 
@@ -878,15 +863,7 @@ function Library:Window(title, size)
                     Set(state)
                 end
 
-                local ClickLayer = Create("TextButton", {
-                    Size = UDim2.new(1, 0, 1, 0),
-                    BackgroundTransparency = 1,
-                    Text = "",
-                    TextTransparency = 1,
-                    AutoButtonColor = false,
-                    ZIndex = 8,
-                    Parent = Holder,
-                })
+                local ClickLayer = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", TextTransparency = 1, AutoButtonColor = false, ZIndex = 8, Parent = Holder })
                 ClickLayer.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                         ToggleState()
@@ -934,10 +911,8 @@ function Library:Window(title, size)
                     local CPBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = CPHolder })
                     local Picker = Create("Frame", { Size = UDim2.new(0, 160, 0, 140), BackgroundColor3 = Library.Theme.DarkBackground, Visible = false, ZIndex = 3000, Parent = ScreenGui })
                     ApplyCelestiteStyle(Picker)
-
                     local DragBar2 = Create("Frame", { Name = "DragBar", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 3006, Parent = Picker })
                     MakeDraggable(Picker, DragBar2)
-
                     local HueSlider = Create("Frame", { Size = UDim2.new(0, 12, 0, 120), Position = UDim2.new(1, -22, 0, 10), ZIndex = 3001, Parent = Picker })
                     ApplyCelestiteStyle(HueSlider)
                     Create("UIGradient", { Rotation = 90, Color = ColorSequence.new({
@@ -962,9 +937,7 @@ function Library:Window(title, size)
                     local function UpdatePos() local pos = CPHolder.AbsolutePosition; Picker.Position = UDim2.new(0, pos.X + 25, 0, pos.Y) end
                     local function ClosePicker() Picker.Visible = false; if pickerConn then pickerConn:Disconnect(); pickerConn = nil end end
                     CPBtn.MouseButton1Click:Connect(function()
-                        if Picker.Visible then
-                            ClosePicker()
-                        else
+                        if Picker.Visible then ClosePicker() else
                             UpdatePos()
                             Picker.Visible = true
                             pickerConn = UIS.InputBegan:Connect(function(input)
@@ -1020,7 +993,6 @@ function Library:Window(title, size)
                 local SliderBack = Create("Frame", { Name = "SliderBack", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 16), BackgroundColor3 = Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(SliderBack)
                 local SliderFill = Create("Frame", { Name = "Fill", Size = UDim2.new((val - min) / (max - min), 0, 1, 0), BackgroundColor3 = Library.Theme.Accent, BorderSizePixel = 0, ZIndex = 8, Parent = SliderBack })
-
                 table.insert(Library.Elements.Sliders, { Fill = SliderFill, Label = Label, Value = Value, Back = SliderBack })
                 local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", TextTransparency = 1, ZIndex = 10, Parent = SliderBack })
                 local function update(input)
@@ -1159,11 +1131,10 @@ function Library:Window(title, size)
                 local Meta = {}
                 local SelectedPlayer = nil
                 local function getMeta(p)
-                    if not Meta[p] then Meta[p] = { prioritize = false, friendly = false } end
+                    if not Meta[p] then Meta[p] = { prioritize = false, friendly = false, spectate = false } end
                     return Meta[p]
                 end
 
-                -- If the section is in Fill mode, the block fills the section.
                 local Block = Create("Frame", {
                     Name = "PlayerListBlock",
                     Size = fill and UDim2.new(1, 0, 1, 0) or UDim2.new(1, 0, 0, blockHeight),
@@ -1186,11 +1157,7 @@ function Library:Window(title, size)
                     Parent = Block,
                 })
                 table.insert(Library.Elements.PlayerListScrolls, ListHolder)
-                Create("UIListLayout", {
-                    SortOrder = Enum.SortOrder.LayoutOrder,
-                    Padding = UDim.new(0, 0),
-                    Parent = ListHolder,
-                })
+                Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 0), Parent = ListHolder })
 
                 local DetailPanel = Create("Frame", {
                     Name = "DetailPanel",
@@ -1278,7 +1245,7 @@ function Library:Window(title, size)
                         Parent = ButtonsCol,
                     })
                     ApplyCelestiteStyle(Btn)
-                    Create("TextLabel", {
+                    local Lbl = Create("TextLabel", {
                         Text = text,
                         Size = UDim2.new(1, 0, 1, 0),
                         BackgroundTransparency = 1,
@@ -1293,11 +1260,24 @@ function Library:Window(title, size)
                         TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
                     table.insert(Library.Elements.Buttons, Btn)
-                    return Btn
+                    return Btn, Lbl
                 end
 
-                local PriorityBtn = mkActionBtn("Prioritize", 1)
-                local FriendlyBtn = mkActionBtn("Friendly",   2)
+                -- TP: single-press button. Spectate: toggle button.
+                local TPBtn        = mkActionBtn("TP", 1)
+                local SpectateBtn  = mkActionBtn("Spectate", 2)
+
+                -- Spectate toggle state
+                local spectating = false
+                local function setSpectateVisual(state)
+                    spectating = state
+                    SpectateBtn.BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground
+                end
+                -- Register spectate toggle state so theme updates keep it in sync
+                table.insert(Library.Elements.PlayerListActionBtns, {
+                    Btn = SpectateBtn,
+                    IsActive = function() return spectating end,
+                })
 
                 local function UpdateDetail(player)
                     if not player or not player.Parent then
@@ -1314,9 +1294,9 @@ function Library:Window(title, size)
                     UserRow.Text = "Name : " .. player.Name
                     AgeRow.Text  = "Account Age : " .. (player.AccountAge or 0)
 
-                    local meta = getMeta(player)
-                    PriorityBtn.BackgroundColor3 = meta.prioritize and Library.Theme.Accent or Library.Theme.SectionBackground
-                    FriendlyBtn.BackgroundColor3 = meta.friendly   and Library.Theme.Accent or Library.Theme.SectionBackground
+                    -- Sync spectate button to the currently-selected player's meta
+                    local m = getMeta(player)
+                    setSpectateVisual(m.spectate == true)
                 end
 
                 local Rows = {}
@@ -1330,7 +1310,6 @@ function Library:Window(title, size)
                         ZIndex = 6,
                         Parent = ListHolder,
                     })
-
                     local nameL = Create("TextLabel", {
                         Text = player.Name,
                         Size = UDim2.new(1, -100, 1, 0),
@@ -1345,7 +1324,6 @@ function Library:Window(title, size)
                         TextStrokeTransparency = 0,
                         TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
-
                     local statusL = Create("TextLabel", {
                         Text = "None",
                         Size = UDim2.new(0, 90, 1, 0),
@@ -1360,7 +1338,6 @@ function Library:Window(title, size)
                         TextStrokeTransparency = 0,
                         TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
-
                     local divider = Create("Frame", {
                         Size = UDim2.new(1, 0, 0, 1),
                         Position = UDim2.new(0, 0, 1, -1),
@@ -1403,7 +1380,6 @@ function Library:Window(title, size)
                         if aLocal ~= bLocal then return aLocal end
                         return a.Name:lower() < b.Name:lower()
                     end)
-
                     for player, data in pairs(Rows) do
                         if not player.Parent or not table.find(players, player) then
                             data.Row:Destroy()
@@ -1414,18 +1390,15 @@ function Library:Window(title, size)
                             end
                         end
                     end
-
                     for i, player in ipairs(players) do
                         local data = Rows[player]
                         if not data then
                             data = CreateRow(player)
                             Rows[player] = data
                         end
-
                         data.Row.LayoutOrder = i
                         data.IsLocal = (player == Players.LocalPlayer)
                         data.Name.Text = player.Name
-
                         if data.IsLocal then
                             data.Status.Text = "Local Player"
                             data.Status.TextColor3 = Library.Theme.Accent
@@ -1441,12 +1414,10 @@ function Library:Window(title, size)
                             data.Status.Text = "None"
                             data.Status.TextColor3 = Library.Theme.InactiveText
                         end
-
                         data.Row.BackgroundColor3 = (player == SelectedPlayer)
                             and Library.Theme.SectionBackground
                             or  Library.Theme.DarkBackground
                     end
-
                     ListHolder.CanvasSize = UDim2.new(0, 0, 0, #players * rowHeight)
                 end
 
@@ -1465,20 +1436,19 @@ function Library:Window(title, size)
                     end
                 end)
 
-                PriorityBtn.MouseButton1Click:Connect(function()
+                -- TP (single-press)
+                TPBtn.MouseButton1Click:Connect(function()
                     if not SelectedPlayer or not SelectedPlayer.Parent then return end
-                    local m = getMeta(SelectedPlayer)
-                    m.prioritize = not m.prioritize
-                    UpdateDetail(SelectedPlayer)
-                    if popts.OnPrioritize then popts.OnPrioritize(SelectedPlayer, m.prioritize) end
+                    if popts.OnTeleport then popts.OnTeleport(SelectedPlayer) end
                 end)
 
-                FriendlyBtn.MouseButton1Click:Connect(function()
+                -- Spectate (toggle)
+                SpectateBtn.MouseButton1Click:Connect(function()
                     if not SelectedPlayer or not SelectedPlayer.Parent then return end
                     local m = getMeta(SelectedPlayer)
-                    m.friendly = not m.friendly
-                    UpdateDetail(SelectedPlayer)
-                    if popts.OnFriendly then popts.OnFriendly(SelectedPlayer, m.friendly) end
+                    m.spectate = not m.spectate
+                    setSpectateVisual(m.spectate)
+                    if popts.OnSpectate then popts.OnSpectate(SelectedPlayer, m.spectate) end
                 end)
 
                 return {
@@ -1617,7 +1587,6 @@ function Library:Window(title, size)
     ToggleCorner.CornerRadius = UDim.new(1, 0)
     ToggleCorner.Parent = ToggleBtn
     AddOutline(ToggleBtn)
-
     MakeDraggable(ToggleBtn)
 
     local uiVisible = true
