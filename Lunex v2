@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.1 (Library Build + Toggle Fix)
+    Celestite UI Library - V2.2 (Improved Outline + Section Accents)
     CSGO Gamesense/Splix Style | ScreenGui Based
     Usage:  local Library = loadstring(...)()
             local Window = Library:Window("Title")
@@ -23,7 +23,6 @@ local function Tween(obj, props, time)
     TweenService:Create(obj, TweenInfo.new(time or 0.15, Enum.EasingStyle.Quad), props):Play()
 end
 
--- Base64 Decoder (Fallback)
 local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 local function decodeBase64(data)
     data = string.gsub(data, '[^'..b64chars..'=]', '')
@@ -48,7 +47,6 @@ local function IsWithin(obj, input)
     return mPos.X >= pos.X and mPos.X <= pos.X + size.X and mPos.Y >= pos.Y and mPos.Y <= pos.Y + size.Y
 end
 
--- Generic reusable drag-enabler
 local function MakeDraggable(frame, handle)
     handle = handle or frame
     local dragging = false
@@ -177,20 +175,18 @@ local function GetKeyName(k)
     return name:gsub(" ", "")
 end
 
--- Global keybind handler
 UIS.InputBegan:Connect(function(input, gpe)
     local cur = (input.UserInputType == Enum.UserInputType.Keyboard) and input.KeyCode or input.UserInputType
     for _, bind in pairs(Library.Registry) do
         if bind.Binding then
             if cur ~= Enum.KeyCode.Unknown then
-                -- ignore the mouse-up that started the bind
                 if cur == Enum.UserInputType.MouseButton1 and tick() - bind.Started < 0.1 then
-                    -- skip
+                    -- skip the same click that started the bind
                 else
                     bind.Binding = false
                     bind.Key = cur
                     if bind.Label then
-                        bind.Label.TextColor3 = Library.Theme.TextWhite or Library.Theme.Text
+                        bind.Label.TextColor3 = Library.Theme.Text
                         bind.Label.Text = GetKeyName(cur)
                     end
                     if bind.Callback then bind.Callback(cur) end
@@ -212,10 +208,15 @@ Library.Theme = {
     Outline = Color3.fromRGB(5, 5, 5),
     Text = Color3.fromRGB(255, 255, 255),
     InactiveText = Color3.fromRGB(180, 180, 180),
-    SectionBackground = Color3.fromRGB(35, 35, 35)
+    SectionBackground = Color3.fromRGB(35, 35, 35),
+    HeaderBar = Color3.fromRGB(20, 20, 20),
 }
 
-Library.Elements = { Toggles = {}, Sliders = {}, Sections = {}, Tabs = {}, Windows = {}, Labels = {}, Dropdowns = {}, Outlines = {}, Inlines = {}, ColorPickers = {}, Buttons = {}, TextBoxes = {} }
+Library.Elements = {
+    Toggles = {}, Sliders = {}, Sections = {}, Tabs = {}, Windows = {},
+    Labels = {}, Dropdowns = {}, Outlines = {}, Inlines = {}, ColorPickers = {},
+    Buttons = {}, TextBoxes = {}, SectionAccents = {}, SectionHeaders = {}
+}
 Library.Flags = {}
 
 function Library:UpdateTheme()
@@ -228,6 +229,12 @@ function Library:UpdateTheme()
     for _, sec in pairs(Library.Elements.Sections) do
         sec.Frame.BackgroundColor3 = Library.Theme.DarkBackground;
         sec.Header.TextColor3 = Library.Theme.Text;
+    end
+    for _, hdr in pairs(Library.Elements.SectionHeaders) do
+        hdr.BackgroundColor3 = Library.Theme.HeaderBar
+    end
+    for _, acc in pairs(Library.Elements.SectionAccents) do
+        acc.BackgroundColor3 = Library.Theme.Accent
     end
     for _, tog in pairs(Library.Elements.Toggles) do
         tog.Box.BackgroundColor3 = tog.GetState() and Library.Theme.Accent or Library.Theme.SectionBackground
@@ -394,7 +401,7 @@ end
 function Library:Window(title, size)
     local Window = { Tabs = {} }
     local Main = Create("Frame", { Name = "CelestiteWindow", Size = size or UDim2.new(0, 620, 0, 460), Position = UDim2.new(0.5, -310, 0.5, -230), BackgroundColor3 = Library.Theme.DarkBackground, BorderSizePixel = 0, Parent = ScreenGui, ClipsDescendants = false })
-    AddInlineOutline(Main)
+    ApplyCelestiteStyle(Main)
     local AccentLine = Create("Frame", { Name = "AccentLine", Size = UDim2.new(1, -2, 0, 1), Position = UDim2.new(0, 1, 0, 1), BackgroundColor3 = Library.Theme.Accent, BorderSizePixel = 0, ZIndex = 10, Parent = Main })
     local TitleBar = Create("Frame", { Name = "TitleBar", Size = UDim2.new(1, -4, 0, 26), Position = UDim2.new(0, 2, 0, 3), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 2, Parent = Main })
     AddInlineOutline(TitleBar)
@@ -438,14 +445,79 @@ function Library:Window(title, size)
         table.insert(Library.Elements.Tabs, { Accent = TabAccent, Button = TabButton, IsActive = function() return TabPage.Visible end })
         if #Window.Tabs == 1 then Activate() end
 
+        --=========================================================
+        -- SECTION  (improved: outer outline + header bar + accent underline)
+        --=========================================================
         function Tab:Section(sectionName, side)
             local Section = {}
             local parent = (side and side:lower() == "right") and RightColumn or LeftColumn
-            local SectionFrame = Create("Frame", { Name = sectionName, Size = UDim2.new(1, -4, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = Library.Theme.DarkBackground, BorderSizePixel = 0, ZIndex = 4, Parent = parent, ClipsDescendants = false })
-            AddInlineOutline(SectionFrame)
-            local Header = Create("TextLabel", { Name = "Header", Text = sectionName, Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5, Parent = SectionFrame, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0,0,0) })
+
+            -- Outer frame (auto-height) with full 3-layer border treatment
+            local SectionFrame = Create("Frame", {
+                Name = sectionName,
+                Size = UDim2.new(1, -4, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundColor3 = Library.Theme.DarkBackground,
+                BorderSizePixel = 0,
+                ZIndex = 4,
+                Parent = parent,
+                ClipsDescendants = false
+            })
+            -- 3-layer outline: outer line + inner line (matches window styling)
+            ApplyCelestiteStyle(SectionFrame)
+
+            -- Dedicated header bar so the title sits on a darker strip (like the window title bar)
+            local HeaderBar = Create("Frame", {
+                Name = "HeaderBar",
+                Size = UDim2.new(1, -2, 0, 20),
+                Position = UDim2.new(0, 1, 0, 1),
+                BackgroundColor3 = Library.Theme.HeaderBar,
+                BorderSizePixel = 0,
+                ZIndex = 4,
+                Parent = SectionFrame
+            })
+            table.insert(Library.Elements.SectionHeaders, HeaderBar)
+
+            local Header = Create("TextLabel", {
+                Name = "Header",
+                Text = sectionName,
+                Size = UDim2.new(1, 0, 0, 20),
+                Position = UDim2.new(0, 0, 0, 0),
+                BackgroundTransparency = 1,
+                FontFace = true,
+                TextSize = Library.Config.FontSize,
+                TextColor3 = Library.Theme.Text,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                ZIndex = 5,
+                Parent = SectionFrame,
+                TextStrokeTransparency = 0,
+                TextStrokeColor3 = Color3.fromRGB(0,0,0)
+            })
             table.insert(Library.Elements.Sections, { Frame = SectionFrame, Header = Header })
-            local ElementList = Create("Frame", { Name = "Elements", Size = UDim2.new(1, -12, 0, 0), Position = UDim2.new(0, 6, 0, 23), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 5, Parent = SectionFrame, ClipsDescendants = false })
+
+            -- Accent underline directly under the header, mirrors the window's AccentLine
+            local AccentUnderline = Create("Frame", {
+                Name = "AccentUnderline",
+                Size = UDim2.new(1, -2, 0, 1),
+                Position = UDim2.new(0, 1, 0, 21),
+                BackgroundColor3 = Library.Theme.Accent,
+                BorderSizePixel = 0,
+                ZIndex = 6,
+                Parent = SectionFrame
+            })
+            table.insert(Library.Elements.SectionAccents, AccentUnderline)
+
+            -- Element container starts below header (20) + accent (1) + small gap (3) = 24
+            local ElementList = Create("Frame", {
+                Name = "Elements",
+                Size = UDim2.new(1, -12, 0, 0),
+                Position = UDim2.new(0, 6, 0, 24),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                ZIndex = 5,
+                Parent = SectionFrame,
+                ClipsDescendants = false
+            })
             Create("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = ElementList})
             Create("UIPadding", {PaddingBottom = UDim.new(0, 9), Parent = ElementList})
 
@@ -491,7 +563,7 @@ function Library:Window(title, size)
                 ApplyCelestiteStyle(CPHolder)
                 local CPBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = CPHolder })
                 local Picker = Create("Frame", { Size = UDim2.new(0, 160, 0, 140), BackgroundColor3 = Library.Theme.DarkBackground, Visible = false, ZIndex = 300, Parent = ScreenGui })
-                AddInlineOutline(Picker)
+                ApplyCelestiteStyle(Picker)
                 table.insert(Library.Elements.ColorPickers, { Frame = Holder, Picker = Picker })
 
                 local DragBar = Create("Frame", { Name = "DragBar", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 306, Parent = Picker })
@@ -553,9 +625,7 @@ function Library:Window(title, size)
                 return CPObj
             end
 
-            --=========================================================
-            -- TOGGLE (fixed: full-width hit area + addons sit above)
-            --=========================================================
+            -- Toggle (with the earlier click-region fix preserved)
             function Section:Toggle(opts)
                 local state = opts.Default or false
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
@@ -564,7 +634,6 @@ function Library:Window(title, size)
                 local Label = Create("TextLabel", { Text = opts.Name or "Toggle", Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0,0,0) })
                 table.insert(Library.Elements.Labels, Label)
 
-                -- Addons (keybind / colorpicker) live here; higher ZIndex than the toggle's click layer
                 local RightSide = Create("Frame", { Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, ZIndex = 10, Parent = Holder })
                 Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = RightSide })
 
@@ -579,7 +648,6 @@ function Library:Window(title, size)
                     Set(state)
                 end
 
-                -- Full width, sits at ZIndex 8 (below addons at ZIndex 10+ so keybinds/pickers still receive clicks)
                 local ClickLayer = Create("TextButton", {
                     Size = UDim2.new(1, 0, 1, 0),
                     BackgroundTransparency = 1,
@@ -589,11 +657,8 @@ function Library:Window(title, size)
                     ZIndex = 8,
                     Parent = Holder,
                 })
-                -- Manual click detection so we can guard against re-entrant toggles
                 ClickLayer.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        -- if the click actually landed on an addon button (higher ZIndex), Roblox sends it there instead,
-                        -- so reaching this handler means the click is on the toggle body
                         ToggleState()
                     end
                 end)
@@ -638,7 +703,7 @@ function Library:Window(title, size)
                     ApplyCelestiteStyle(CPHolder)
                     local CPBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = CPHolder })
                     local Picker = Create("Frame", { Size = UDim2.new(0, 160, 0, 140), BackgroundColor3 = Library.Theme.DarkBackground, Visible = false, ZIndex = 3000, Parent = ScreenGui })
-                    AddInlineOutline(Picker)
+                    ApplyCelestiteStyle(Picker)
 
                     local DragBar2 = Create("Frame", { Name = "DragBar", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 3006, Parent = Picker })
                     MakeDraggable(Picker, DragBar2)
@@ -659,16 +724,7 @@ function Library:Window(title, size)
                     local function UpdatePos() local pos = CPHolder.AbsolutePosition; Picker.Position = UDim2.new(0, pos.X + 25, 0, pos.Y) end
                     local function ClosePicker() Picker.Visible = false; if pickerConn then pickerConn:Disconnect(); pickerConn = nil end; if renderConn then renderConn:Disconnect(); renderConn = nil end end
                     CPBtn.MouseButton1Click:Connect(function()
-                        if Picker.Visible then
-                            ClosePicker()
-                        else
-                            UpdatePos(); Picker.Visible = true
-                            pickerConn = UIS.InputBegan:Connect(function(input)
-                                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                                    if not IsWithin(Picker, input) and not IsWithin(CPHolder, input) then ClosePicker() end
-                                end
-                            end)
-                        end
+                        if Picker.Visible then ClosePicker() else UpdatePos(); Picker.Visible = true; pickerConn = UIS.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then if not IsWithin(Picker, input) and not IsWithin(CPHolder, input) then ClosePicker() end end end) end
                     end)
                     local sS, sH = false, false
                     local function Update() color = Color3.fromHSV(h, s, v); CPHolder.BackgroundColor3 = color; SVBox.BackgroundColor3 = Color3.fromHSV(h, 1, 1); if copts.Callback then copts.Callback(color) end end
@@ -708,7 +764,7 @@ function Library:Window(title, size)
                 local Label = Create("TextLabel", { Text = opts.Name or "Slider", Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0,0,0) })
                 table.insert(Library.Elements.Labels, Label)
                 local SliderBack = Create("Frame", { Name = "SliderBack", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 16), BackgroundColor3 = Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
-                AddInlineOutline(SliderBack)
+                ApplyCelestiteStyle(SliderBack)
                 local SliderFill = Create("Frame", { Name = "Fill", Size = UDim2.new((val - min) / (max - min), 0, 1, 0), BackgroundColor3 = Library.Theme.Accent, BorderSizePixel = 0, ZIndex = 8, Parent = SliderBack })
 
                 table.insert(Library.Elements.Sliders, { Fill = SliderFill, Label = Label, Value = Value, Back = SliderBack })
@@ -750,8 +806,7 @@ function Library:Window(title, size)
                 local Button = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 9, Parent = Box })
 
                 local DropContainer = Create("Frame", { Name = "DropContainer", BackgroundColor3 = Library.Theme.DarkBackground, BorderSizePixel = 0, Visible = false, ZIndex = 5000, Parent = ScreenGui, ClipsDescendants = true })
-                AddOutline(DropContainer)
-                AddInlineOutline(DropContainer)
+                ApplyCelestiteStyle(DropContainer)
 
                 local OptionHolder = Create("ScrollingFrame", { Name = "Options", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5001, Parent = DropContainer, ScrollBarThickness = 2, CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
@@ -822,6 +877,7 @@ function Library:Window(title, size)
             ThemeSection:ColorPicker({ Name = "Accent Color", Default = Library.Theme.Accent, Callback = function(c) Library.Theme.Accent = c; Library:UpdateTheme() end })
             ThemeSection:ColorPicker({ Name = "Background Color", Default = Library.Theme.Background, Callback = function(c) Library.Theme.Background = c; Library:UpdateTheme() end })
             ThemeSection:ColorPicker({ Name = "Dark Background", Default = Library.Theme.DarkBackground, Callback = function(c) Library.Theme.DarkBackground = c; Library:UpdateTheme() end })
+            ThemeSection:ColorPicker({ Name = "Header Bar", Default = Library.Theme.HeaderBar, Callback = function(c) Library.Theme.HeaderBar = c; Library:UpdateTheme() end })
             ThemeSection:ColorPicker({ Name = "Text Color", Default = Library.Theme.Text, Callback = function(c) Library.Theme.Text = c; Library:UpdateTheme() end })
             ThemeSection:ColorPicker({ Name = "Inactive Text", Default = Library.Theme.InactiveText, Callback = function(c) Library.Theme.InactiveText = c; Library:UpdateTheme() end })
             ThemeSection:ColorPicker({ Name = "Outline Color", Default = Library.Theme.Outline, Callback = function(c) Library.Theme.Outline = c; Library:UpdateTheme() end })
@@ -914,7 +970,6 @@ function Library:Window(title, size)
 
     task.delay(0.2, function() Library:UpdateTheme() end)
 
-    -- Floating "toggle ui" pill button
     local ToggleBtn = Create("TextButton", {
         Name = "ToggleUIButton",
         Text = "toggle ui",
