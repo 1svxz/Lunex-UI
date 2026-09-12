@@ -1,19 +1,20 @@
 --[[
-    Celestite UI Library - V2.5 (Full, Embedded Player List)
+    Celestite UI Library - V2.6 (Full, Full-Width Sections + Edge Drag)
     Features:
       • CSGO Gamesense/Splix style window, tabs, sections with 3-layer outlines
       • Full control set: Toggle, Slider, Dropdown, Button, TextBox, ColorPicker,
         Keybind, Toggle:ColorPicker
       • Theme manager, Config manager
-      • Section:PlayerList() — CSGO-style player list embedded inside a section,
-        with detail panel (avatar, id, display name, name, account age) and
-        Prioritize / Friendly buttons
+      • Section:PlayerList() — CSGO-style player list embedded inside a section
+      • Tab:Section("X", "full", { Fill = true }) — full-tab sections
+      • Window edges are draggable (not a resize feature)
     Usage:
         local Library = loadstring(game:HttpGet("URL"))()
         local Window  = Library:Window("Title", UDim2.new(0, 620, 0, 460))
         local Tab     = Window:Tab("Main")
         local Section = Tab:Section("Group", "Left")
-        local PL      = Section:PlayerList({ ShowDistance = false })
+        local FullSec = Tab:Section("Player List", "full", { Fill = true })
+        local PL      = FullSec:PlayerList({ ShowDistance = false })
 ]]
 
 local Players      = game:GetService("Players")
@@ -319,9 +320,6 @@ function Library:UpdateTheme()
             pr.Status.TextColor3 = Library.Theme.InactiveText
         end
     end
-    for _, pb in pairs(Library.Elements.PlayerListActionBtns) do
-        pb.Btn.BackgroundColor3 = pb.IsActive() and Library.Theme.Accent or Library.Theme.SectionBackground
-    end
 end
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -531,6 +529,32 @@ function Library:Window(title, size)
 
     MakeDraggable(Main, TitleBar)
 
+    -- Edge drag handles — 5px thick, invisible, one per side of the window.
+    -- Grabbing any edge drags the whole window (does not resize).
+    do
+        local EDGE = 5
+        local edgeSpecs = {
+            { pos = UDim2.new(0, 0, 0, -EDGE),                 size = UDim2.new(1, 0, 0, EDGE) }, -- top
+            { pos = UDim2.new(0, 0, 1, 0),                     size = UDim2.new(1, 0, 0, EDGE) }, -- bottom
+            { pos = UDim2.new(0, -EDGE, 0, 0),                 size = UDim2.new(0, EDGE, 1, 0) }, -- left
+            { pos = UDim2.new(1, 0, 0, 0),                     size = UDim2.new(0, EDGE, 1, 0) }, -- right
+        }
+        for _, spec in ipairs(edgeSpecs) do
+            local handle = Create("TextButton", {
+                Name = "EdgeDrag",
+                Text = "",
+                BackgroundTransparency = 1,
+                AutoButtonColor = false,
+                Position = spec.pos,
+                Size = spec.size,
+                ZIndex = 20,
+                Parent = Main,
+                Active = true,
+            })
+            MakeDraggable(Main, handle)
+        end
+    end
+
     function Window:Tab(name)
         local Tab = {}
         local TabButton = Create("TextButton", {
@@ -592,6 +616,18 @@ function Library:Window(title, size)
         })
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = RightColumn })
 
+        -- Full-width column (used by "full" sections)
+        local FullColumn = Create("Frame", {
+            Name = "Full",
+            Size = UDim2.new(1, -12, 1, -12),
+            Position = UDim2.new(0, 6, 0, 6),
+            BackgroundTransparency = 1,
+            ZIndex = 3,
+            Parent = TabPage,
+            ClipsDescendants = false
+        })
+        Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = FullColumn })
+
         local function Activate()
             for _, t in pairs(Window.Tabs) do
                 t.Page.Visible = false
@@ -609,16 +645,27 @@ function Library:Window(title, size)
         if #Window.Tabs == 1 then Activate() end
 
         -- ============================================================
-        -- SECTION
+        -- SECTION (with optional full-width + fill)
         -- ============================================================
-        function Tab:Section(sectionName, side)
+        function Tab:Section(sectionName, side, opts)
+            opts = opts or {}
             local Section = {}
-            local parent = (side and side:lower() == "right") and RightColumn or LeftColumn
+            local isFull = (side and side:lower() == "full") == true
+            local fill   = isFull and (opts.Fill ~= false) or (opts.Fill == true)
+
+            local parent
+            if side and side:lower() == "right" then
+                parent = RightColumn
+            elseif isFull then
+                parent = FullColumn
+            else
+                parent = LeftColumn
+            end
 
             local SectionFrame = Create("Frame", {
                 Name = sectionName,
-                Size = UDim2.new(1, -4, 0, 0),
-                AutomaticSize = Enum.AutomaticSize.Y,
+                Size = fill and UDim2.new(1, 0, 1, 0) or UDim2.new(1, -4, 0, 0),
+                AutomaticSize = fill and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
                 BackgroundColor3 = Library.Theme.DarkBackground,
                 BorderSizePixel = 0,
                 ZIndex = 4,
@@ -668,22 +715,22 @@ function Library:Window(title, size)
 
             local ElementList = Create("Frame", {
                 Name = "Elements",
-                Size = UDim2.new(1, -12, 0, 0),
+                Size = fill and UDim2.new(1, -12, 1, -32) or UDim2.new(1, -12, 0, 0),
                 Position = UDim2.new(0, 6, 0, 24),
-                AutomaticSize = Enum.AutomaticSize.Y,
+                AutomaticSize = fill and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 ZIndex = 5,
                 Parent = SectionFrame,
                 ClipsDescendants = false
             })
             Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = ElementList })
-            Create("UIPadding", { PaddingBottom = UDim.new(0, 9), Parent = ElementList })
+            Create("UIPadding", { PaddingBottom = UDim.new(0, fill and 0 or 9), Parent = ElementList })
 
-            function Section:Button(opts)
+            function Section:Button(bopts)
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Box = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Library.Theme.Background, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(Box)
-                local Label = Create("TextLabel", { Text = opts.Name or "Button", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                local Label = Create("TextLabel", { Text = bopts.Name or "Button", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 table.insert(Library.Elements.Buttons, Box)
                 local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 9, Parent = Box })
@@ -691,35 +738,35 @@ function Library:Window(title, size)
                     Tween(Box, { BackgroundColor3 = Color3.fromRGB(45, 45, 45) }, 0.1)
                     task.wait(0.1)
                     Tween(Box, { BackgroundColor3 = Library.Theme.SectionBackground }, 0.1)
-                    if opts.Callback then opts.Callback() end
+                    if bopts.Callback then bopts.Callback() end
                 end)
                 return { SetText = function(t) Label.Text = t end }
             end
 
-            function Section:TextBox(opts)
+            function Section:TextBox(topts)
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
-                local Label = Create("TextLabel", { Text = opts.Name or "Text Box", Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                local Label = Create("TextLabel", { Text = topts.Name or "Text Box", Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local Box = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), Position = UDim2.new(0, 0, 0, 16), BackgroundColor3 = Library.Theme.Background, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(Box)
-                local Input = Create("TextBox", { Text = opts.Default or "", PlaceholderText = opts.Placeholder or "...", Size = UDim2.new(1, -10, 1, 0), Position = UDim2.new(0, 5, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                local Input = Create("TextBox", { Text = topts.Default or "", PlaceholderText = topts.Placeholder or "...", Size = UDim2.new(1, -10, 1, 0), Position = UDim2.new(0, 5, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.TextBoxes, { Box = Box, Input = Input })
-                Input.FocusLost:Connect(function() if opts.Callback then opts.Callback(Input.Text) end end)
+                Input.FocusLost:Connect(function() if topts.Callback then topts.Callback(Input.Text) end end)
                 local Obj = {
                     GetText = function() return Input.Text end,
                     SetText = function(t) Input.Text = t end,
                     Set = function(t) Input.Text = t end
                 }
-                Library.Flags[opts.Flag or opts.Name] = Obj
+                Library.Flags[topts.Flag or topts.Name] = Obj
                 return Obj
             end
 
-            function Section:ColorPicker(opts)
+            function Section:ColorPicker(copts)
                 local h, s, v = 0, 1, 1
-                local color = opts.Default or Color3.fromHSV(h, s, v)
+                local color = copts.Default or Color3.fromHSV(h, s, v)
                 h, s, v = Color3.toHSV(color)
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
-                local Label = Create("TextLabel", { Text = opts.Name or "Color Picker", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                local Label = Create("TextLabel", { Text = copts.Name or "Color Picker", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local CPHolder = Create("Frame", { Size = UDim2.new(0, 18, 0, 10), Position = UDim2.new(1, -18, 0, 3), BackgroundColor3 = color, ZIndex = 12, Parent = Holder })
                 ApplyCelestiteStyle(CPHolder)
@@ -779,10 +826,10 @@ function Library:Window(title, size)
                     SVBox.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
                     Marker.Position = UDim2.new(s, -2, 1 - v, -2)
                     HueMarker.Position = UDim2.new(0, -2, h, 0)
-                    if opts.Callback then opts.Callback(col) end
+                    if copts.Callback then copts.Callback(col) end
                 end
                 local CPObj = { Set = Set, Get = function() return Color3.fromHSV(h, s, v) end }
-                Library.Flags[opts.Flag or opts.Name] = CPObj
+                Library.Flags[copts.Flag or copts.Name] = CPObj
                 local function IsPointerInput(t) return t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch end
                 local function IsPointerMove(t)  return t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch end
                 SVBtn.InputBegan:Connect(function(i) if IsPointerInput(i.UserInputType) then sS = true end end)
@@ -796,26 +843,25 @@ function Library:Window(title, size)
                             s, v = relX, 1 - relY
                             Marker.Position = UDim2.new(s, -2, 1 - v, -2)
                             CPHolder.BackgroundColor3 = Color3.fromHSV(h, s, v)
-                            if opts.Callback then opts.Callback(Color3.fromHSV(h, s, v)) end
+                            if copts.Callback then copts.Callback(Color3.fromHSV(h, s, v)) end
                         elseif sH then
                             h = math.clamp((i.Position.Y - HueSlider.AbsolutePosition.Y) / HueSlider.AbsoluteSize.Y, 0, 1)
                             HueMarker.Position = UDim2.new(0, -2, h, 0)
                             SVBox.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
                             CPHolder.BackgroundColor3 = Color3.fromHSV(h, s, v)
-                            if opts.Callback then opts.Callback(Color3.fromHSV(h, s, v)) end
+                            if copts.Callback then copts.Callback(Color3.fromHSV(h, s, v)) end
                         end
                     end
                 end)
                 return CPObj
             end
 
-            -- Toggle (with click-region fix)
-            function Section:Toggle(opts)
-                local state = opts.Default or false
+            function Section:Toggle(topts)
+                local state = topts.Default or false
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Box = Create("Frame", { Size = UDim2.new(0, 10, 0, 10), Position = UDim2.new(0, 0, 0.5, -5), BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(Box)
-                local Label = Create("TextLabel", { Text = opts.Name or "Toggle", Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                local Label = Create("TextLabel", { Text = topts.Name or "Toggle", Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
 
                 local RightSide = Create("Frame", { Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, ZIndex = 10, Parent = Holder })
@@ -825,7 +871,7 @@ function Library:Window(title, size)
                     state = v
                     Tween(Box, { BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground })
                     Tween(Label, { TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText })
-                    if opts.Callback then opts.Callback(state) end
+                    if topts.Callback then topts.Callback(state) end
                 end
                 local function ToggleState()
                     state = not state
@@ -849,7 +895,7 @@ function Library:Window(title, size)
 
                 local ToggleObj = { GetState = function() return state end, Get = function() return state end, Set = Set }
                 table.insert(Library.Elements.Toggles, { Box = Box, Label = Label, GetState = function() return state end })
-                Library.Flags[opts.Flag or opts.Name] = ToggleObj
+                Library.Flags[topts.Flag or topts.Name] = ToggleObj
 
                 function ToggleObj:Keybind(kopts)
                     local bind = { Key = kopts.Default or Enum.KeyCode.X, Binding = false, Started = 0, Label = nil, OnTrigger = ToggleState, Callback = kopts.Callback }
@@ -962,14 +1008,14 @@ function Library:Window(title, size)
                 return ToggleObj
             end
 
-            function Section:Slider(opts)
-                local min, max = opts.Min, opts.Max
-                local val = opts.Default or min
+            function Section:Slider(sopts)
+                local min, max = sopts.Min, sopts.Max
+                local val = sopts.Default or min
                 local sliding = false
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Value = Create("TextLabel", { Text = tostring(val), Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Value)
-                local Label = Create("TextLabel", { Text = opts.Name or "Slider", Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                local Label = Create("TextLabel", { Text = sopts.Name or "Slider", Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local SliderBack = Create("Frame", { Name = "SliderBack", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 16), BackgroundColor3 = Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(SliderBack)
@@ -982,13 +1028,13 @@ function Library:Window(title, size)
                     val = math.floor(min + (max - min) * pct)
                     SliderFill.Size = UDim2.new(pct, 0, 1, 0)
                     Value.Text = tostring(val)
-                    if opts.Callback then opts.Callback(val) end
+                    if sopts.Callback then sopts.Callback(val) end
                 end
                 local function Set(v)
                     val = v
                     SliderFill.Size = UDim2.new((val - min) / (max - min), 0, 1, 0)
                     Value.Text = tostring(val)
-                    if opts.Callback then opts.Callback(val) end
+                    if sopts.Callback then sopts.Callback(val) end
                 end
                 btn.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1008,15 +1054,15 @@ function Library:Window(title, size)
                 end)
                 UIS.WindowFocusReleased:Connect(function() sliding = false end)
                 local Obj = { Get = function() return val end, Set = Set }
-                Library.Flags[opts.Flag or opts.Name] = Obj
+                Library.Flags[sopts.Flag or sopts.Name] = Obj
                 return Obj
             end
 
-            function Section:Dropdown(opts)
+            function Section:Dropdown(dopts)
                 local dropped = false
-                local selected = opts.Default or (opts.Options and opts.Options[1]) or "None"
+                local selected = dopts.Default or (dopts.Options and dopts.Options[1]) or "None"
                 local Holder = Create("Frame", { Name = "DropdownHolder", Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
-                local Label = Create("TextLabel", { Text = opts.Name, Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                local Label = Create("TextLabel", { Text = dopts.Name, Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local Box = Create("Frame", { Name = "DropdownBox", Size = UDim2.new(1, 0, 0, 18), Position = UDim2.new(0, 0, 0, 15), BackgroundColor3 = Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(Box)
@@ -1033,8 +1079,8 @@ function Library:Window(title, size)
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
 
                 local function UpdateList(new)
-                    if new then opts.Options = new end
-                    local options = opts.Options or {}
+                    if new then dopts.Options = new end
+                    local options = dopts.Options or {}
                     OptionHolder:ClearAllChildren()
                     Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
                     if #options == 0 then
@@ -1050,7 +1096,7 @@ function Library:Window(title, size)
                                 DropContainer.Visible = false
                                 Arrow.Text = "v"
                                 Arrow.Position = UDim2.new(1, -20, 0, -1)
-                                if opts.Callback then opts.Callback(option) end
+                                if dopts.Callback then dopts.Callback(option) end
                                 UpdateList()
                             end)
                         end
@@ -1063,7 +1109,7 @@ function Library:Window(title, size)
                 Button.MouseButton1Click:Connect(function()
                     dropped = not dropped
                     if dropped then
-                        if opts.OnOpen then opts.OnOpen() end
+                        if dopts.OnOpen then dopts.OnOpen() end
                         task.defer(function()
                             UpdateList()
                             DropContainer.Position = UDim2.new(0, Box.AbsolutePosition.X, 0, Box.AbsolutePosition.Y + 20)
@@ -1095,20 +1141,20 @@ function Library:Window(title, size)
                     Set = function(v) selected = v; ValueLabel.Text = tostring(v); UpdateList() end,
                     Refresh = function(new) UpdateList(new) end
                 }
-                Library.Flags[opts.Flag or opts.Name] = Obj
+                Library.Flags[dopts.Flag or dopts.Name] = Obj
                 return Obj
             end
 
             --===========================================================
-            -- EMBEDDED PLAYER LIST (CSGO-style, lives inside a section)
+            -- EMBEDDED PLAYER LIST
             --===========================================================
-            function Section:PlayerList(opts)
-                opts = opts or {}
-                local showDistance = opts.ShowDistance or false
-                local refreshRate  = opts.RefreshRate  or 0.5
-                local blockHeight  = opts.Height       or 400
-                local detailHeight = opts.DetailHeight or 100
+            function Section:PlayerList(popts)
+                popts = popts or {}
+                local showDistance = popts.ShowDistance or false
+                local refreshRate  = popts.RefreshRate  or 0.5
+                local detailHeight = popts.DetailHeight or 100
                 local rowHeight    = 17
+                local blockHeight  = popts.Height or 400
 
                 local Meta = {}
                 local SelectedPlayer = nil
@@ -1117,9 +1163,10 @@ function Library:Window(title, size)
                     return Meta[p]
                 end
 
+                -- If the section is in Fill mode, the block fills the section.
                 local Block = Create("Frame", {
                     Name = "PlayerListBlock",
-                    Size = UDim2.new(1, 0, 0, blockHeight),
+                    Size = fill and UDim2.new(1, 0, 1, 0) or UDim2.new(1, 0, 0, blockHeight),
                     BackgroundTransparency = 1,
                     ZIndex = 6,
                     Parent = ElementList,
@@ -1423,7 +1470,7 @@ function Library:Window(title, size)
                     local m = getMeta(SelectedPlayer)
                     m.prioritize = not m.prioritize
                     UpdateDetail(SelectedPlayer)
-                    if opts.OnPrioritize then opts.OnPrioritize(SelectedPlayer, m.prioritize) end
+                    if popts.OnPrioritize then popts.OnPrioritize(SelectedPlayer, m.prioritize) end
                 end)
 
                 FriendlyBtn.MouseButton1Click:Connect(function()
@@ -1431,7 +1478,7 @@ function Library:Window(title, size)
                     local m = getMeta(SelectedPlayer)
                     m.friendly = not m.friendly
                     UpdateDetail(SelectedPlayer)
-                    if opts.OnFriendly then opts.OnFriendly(SelectedPlayer, m.friendly) end
+                    if popts.OnFriendly then popts.OnFriendly(SelectedPlayer, m.friendly) end
                 end)
 
                 return {
