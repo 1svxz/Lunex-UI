@@ -1,10 +1,9 @@
 --[[
-    Celestite UI Library - V2.11.7 (Full)
-    • FIX: Left/Right tab columns now align their sections flush left
-    • Scrollable tab columns (content never overflows the window)
-    • Centered title + bottom bar with "Welcome PLAYERNAME" / game name
-    • Editable slider value field, animated dropdowns, ripple on buttons
-    • Proggy font, locked full-fill tabs, TP/Spectate, popup cleanup
+    Celestite UI Library - V2.12 (Full)
+    • NEW: "Elisium"-style toggle button — dark box + accent top stripe + centered label
+    • Title top-left, bottom bar with Welcome + game name
+    • Left-aligned scrollable tab columns, editable sliders, animated dropdowns,
+      ripple on buttons, Proggy font, locked full-fill tabs, TP/Spectate
 ]]
 
 local Players      = game:GetService("Players")
@@ -212,6 +211,8 @@ Library.Elements = {
     PlayerListActionBtns = {},
     BottomBarWelcomes = {}, BottomBarGames = {},
     TabScrolls = {},
+    -- NEW: toggle button registries
+    ToggleBtns = {}, ToggleBtnStripes = {}, ToggleBtnLabels = {},
 }
 Library.Flags = {}
 Library.OpenPopups = {}
@@ -276,6 +277,17 @@ function Library:UpdateTheme()
         if scroll and scroll.Parent then
             scroll.ScrollBarImageColor3 = Library.Theme.Accent
         end
+    end
+
+    -- NEW: toggle button theme hooks
+    for _, btn in pairs(Library.Elements.ToggleBtns) do
+        if btn.Parent then btn.BackgroundColor3 = Library.Theme.Background end
+    end
+    for _, stripe in pairs(Library.Elements.ToggleBtnStripes) do
+        if stripe.Parent then stripe.BackgroundColor3 = Library.Theme.Accent end
+    end
+    for _, lbl in pairs(Library.Elements.ToggleBtnLabels) do
+        if lbl.Parent then lbl.TextColor3 = Library.Theme.Text end
     end
 
     local accentHex = ColorToHex(Library.Theme.Accent)
@@ -510,13 +522,14 @@ function Library:Window(title, size)
     Create("TextLabel", {
         Name = "Title",
         Text = title or "Celestite",
-        Size = UDim2.new(1, 0, 1, 0),
-        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(0, 0, 1, 0),
+        AutomaticSize = Enum.AutomaticSize.X,
+        Position = UDim2.new(0, 8, 0, 0),
         BackgroundTransparency = 1,
         FontFace = true,
         TextSize = Library.Config.FontSize,
         TextColor3 = Library.Theme.Text,
-        TextXAlignment = Enum.TextXAlignment.Center,
+        TextXAlignment = Enum.TextXAlignment.Left,
         ZIndex = 3,
         Parent = TitleBar,
         TextStrokeTransparency = 0,
@@ -682,10 +695,6 @@ function Library:Window(title, size)
             ZIndex = 2, Parent = ContentArea
         })
 
-        --------------------------------------------------------------
-        -- SCROLLABLE COLUMNS
-        -- Sections align to the LEFT of their column, never centered.
-        --------------------------------------------------------------
         local function mkColumn(colName, size, pos)
             local col = Create("ScrollingFrame", {
                 Name = colName,
@@ -709,7 +718,7 @@ function Library:Window(title, size)
             Create("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
                 Padding = UDim.new(0, 4),
-                HorizontalAlignment = Enum.HorizontalAlignment.Left,   -- FIX: sections flush left
+                HorizontalAlignment = Enum.HorizontalAlignment.Left,
                 Parent = col,
             })
             return col
@@ -1775,23 +1784,55 @@ function Library:Window(title, size)
 
     task.delay(0.2, function() Library:UpdateTheme() end)
 
+    --=============================================================
+    -- "ELISIUM" STYLE TOGGLE BUTTON
+    --   Dark rectangular box, accent stripe at the top, centered label
+    --=============================================================
     local ToggleBtn = Create("TextButton", {
         Name = "ToggleUIButton",
-        Text = "toggle ui",
-        Size = UDim2.new(0, 90, 0, 44),
+        Text = "",
+        Size = UDim2.new(0, 150, 0, 62),
         Position = UDim2.new(0, 20, 0, 20),
-        BackgroundColor3 = Color3.fromRGB(20, 20, 20),
+        BackgroundColor3 = Library.Theme.Background,
         AutoButtonColor = false,
-        FontFace = true,
-        TextSize = Library.Config.FontSize,
-        TextColor3 = Library.Theme.Text,
-        ZIndex = 10000, Parent = ScreenGui,
-        TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        BorderSizePixel = 0,
+        ZIndex = 10000,
+        Parent = ScreenGui,
     })
-    local ToggleCorner = Instance.new("UICorner")
-    ToggleCorner.CornerRadius = UDim.new(1, 0)
-    ToggleCorner.Parent = ToggleBtn
-    AddOutline(ToggleBtn)
+    ApplyCelestiteStyle(ToggleBtn)
+    table.insert(Library.Elements.ToggleBtns, ToggleBtn)
+
+    -- Accent stripe across the top
+    local ToggleStripe = Create("Frame", {
+        Name = "Stripe",
+        Size = UDim2.new(1, -6, 0, 3),
+        Position = UDim2.new(0, 3, 0, 3),
+        BackgroundColor3 = Library.Theme.Accent,
+        BorderSizePixel = 0,
+        ZIndex = 10001,
+        Parent = ToggleBtn,
+    })
+    table.insert(Library.Elements.ToggleBtnStripes, ToggleStripe)
+
+    -- Centered label
+    local ToggleLabel = Create("TextLabel", {
+        Name = "Label",
+        Text = "Elisium",
+        Size = UDim2.new(1, 0, 1, -8),
+        Position = UDim2.new(0, 0, 0, 8),
+        BackgroundTransparency = 1,
+        FontFace = true,
+        TextSize = 22,
+        TextColor3 = Library.Theme.Text,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 10001,
+        Parent = ToggleBtn,
+        TextStrokeTransparency = 0,
+        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+    })
+    table.insert(Library.Elements.ToggleBtnLabels, ToggleLabel)
+
     MakeDraggable(ToggleBtn)
 
     local uiVisible = true
@@ -1801,7 +1842,12 @@ function Library:Window(title, size)
         if not uiVisible then Library:CloseAllPopups() end
     end)
 
-    table.insert(Library.Elements.Buttons, ToggleBtn)
+    -- Public API to relabel the toggle button
+    function Window:SetToggleButtonText(str)
+        if ToggleLabel and ToggleLabel.Parent then
+            ToggleLabel.Text = tostring(str)
+        end
+    end
 
     return Window
 end
