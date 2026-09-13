@@ -1,14 +1,7 @@
 --[[
-    Celestite UI Library - V2.7 (Full, Locked Fill Tabs + TP / Spectate)
-    Features:
-      • CSGO Gamesense/Splix style window, tabs, sections with 3-layer outlines
-      • Full control set: Toggle, Slider, Dropdown, Button, TextBox, ColorPicker,
-        Keybind, Toggle:ColorPicker
-      • Theme manager, Config manager
-      • Section:PlayerList() — CSGO-style player list embedded inside a section
-        Detail panel buttons: TP (button) + Spectate (toggle)
-      • A tab with a "full" + Fill section is locked — no more sections can be added
-      • Window edges are draggable (not a resize feature)
+    Celestite UI Library - V2.8 (Full, Popup Cleanup Fix)
+    Fix: dropdowns and color pickers now close when the UI is hidden
+         via the "toggle ui" button.
 ]]
 
 local Players      = game:GetService("Players")
@@ -223,6 +216,21 @@ Library.Elements = {
 }
 Library.Flags = {}
 
+-- NEW: popup registry for the UI-hide cleanup
+Library.OpenPopups = {}
+
+function Library:RegisterPopup(fn)
+    table.insert(self.OpenPopups, fn)
+end
+
+function Library:CloseAllPopups()
+    local snapshot = {}
+    for i, fn in ipairs(self.OpenPopups) do snapshot[i] = fn end
+    for _, fn in ipairs(snapshot) do
+        pcall(fn)
+    end
+end
+
 function Library:UpdateTheme()
     for _, win in pairs(Library.Elements.Windows) do
         win.Main.BackgroundColor3     = Library.Theme.DarkBackground
@@ -282,7 +290,6 @@ function Library:UpdateTheme()
     for _, out in pairs(Library.Elements.Outlines) do out.Color = Library.Theme.Outline end
     for _, inl in pairs(Library.Elements.Inlines)  do inl.Color = Library.Theme.Inline  end
 
-    -- Player list
     for _, ps  in pairs(Library.Elements.PlayerListScrolls)    do ps.ScrollBarImageColor3 = Library.Theme.Accent          end
     for _, pd  in pairs(Library.Elements.PlayerListDetails)    do pd.BackgroundColor3     = Library.Theme.Background      end
     for _, pt  in pairs(Library.Elements.PlayerListThumbs)     do pt.BackgroundColor3     = Library.Theme.SectionBackground end
@@ -297,7 +304,6 @@ function Library:UpdateTheme()
             pr.Status.TextColor3 = Library.Theme.InactiveText
         end
     end
-    -- Spectate button state (uses accent when ON)
     for _, pb in pairs(Library.Elements.PlayerListActionBtns) do
         pb.Btn.BackgroundColor3 = pb.IsActive() and Library.Theme.Accent or Library.Theme.SectionBackground
     end
@@ -509,7 +515,6 @@ function Library:Window(title, size)
 
     MakeDraggable(Main, TitleBar)
 
-    -- Edge drag handles — dragging any of them moves the whole window
     do
         local EDGE = 5
         local edgeSpecs = {
@@ -606,7 +611,6 @@ function Library:Window(title, size)
         })
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = FullColumn })
 
-        -- Locked-tab flag: once a fill section is added, no more can be added.
         Tab._locked = false
 
         local function Activate()
@@ -625,15 +629,11 @@ function Library:Window(title, size)
         table.insert(Library.Elements.Tabs, { Accent = TabAccent, Button = TabButton, IsActive = function() return TabPage.Visible end })
         if #Window.Tabs == 1 then Activate() end
 
-        -- ============================================================
-        -- SECTION
-        -- ============================================================
         function Tab:Section(sectionName, side, opts)
             opts = opts or {}
 
-            -- Prevent adding extra sections to a tab that already has a fill section
             if Tab._locked then
-                warn(("[Celestite] Cannot add section '%s' — tab '%s' is locked by its full-fill section."):format(tostring(sectionName), tostring(TabButton.Name)))
+                warn(("[Celestite] Cannot add section '%s' — tab '%s' is locked."):format(tostring(sectionName), tostring(TabButton.Name)))
                 return nil
             end
 
@@ -641,9 +641,7 @@ function Library:Window(title, size)
             local isFull = (side and side:lower() == "full") == true
             local fill   = isFull and (opts.Fill ~= false) or (opts.Fill == true)
 
-            if fill then
-                Tab._locked = true
-            end
+            if fill then Tab._locked = true end
 
             local parent
             if side and side:lower() == "right" then
@@ -795,6 +793,8 @@ function Library:Window(title, size)
                     Picker.Visible = false
                     if pickerConn then pickerConn:Disconnect(); pickerConn = nil end
                 end
+                -- NEW: register this picker for the global popup cleanup
+                Library:RegisterPopup(ClosePicker)
                 CPBtn.MouseButton1Click:Connect(function()
                     if Picker.Visible then ClosePicker() else
                         UpdatePos()
@@ -936,6 +936,8 @@ function Library:Window(title, size)
                     local pickerConn
                     local function UpdatePos() local pos = CPHolder.AbsolutePosition; Picker.Position = UDim2.new(0, pos.X + 25, 0, pos.Y) end
                     local function ClosePicker() Picker.Visible = false; if pickerConn then pickerConn:Disconnect(); pickerConn = nil end end
+                    -- NEW: register for cleanup
+                    Library:RegisterPopup(ClosePicker)
                     CPBtn.MouseButton1Click:Connect(function()
                         if Picker.Visible then ClosePicker() else
                             UpdatePos()
@@ -1050,6 +1052,14 @@ function Library:Window(title, size)
                 local OptionHolder = Create("ScrollingFrame", { Name = "Options", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5001, Parent = DropContainer, ScrollBarThickness = 2, CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
 
+                -- NEW: register the dropdown's close behaviour with the global popup cleanup
+                Library:RegisterPopup(function()
+                    dropped = false
+                    DropContainer.Visible = false
+                    Arrow.Text = "v"
+                    Arrow.Position = UDim2.new(1, -20, 0, -1)
+                end)
+
                 local function UpdateList(new)
                     if new then dopts.Options = new end
                     local options = dopts.Options or {}
@@ -1117,9 +1127,6 @@ function Library:Window(title, size)
                 return Obj
             end
 
-            --===========================================================
-            -- EMBEDDED PLAYER LIST
-            --===========================================================
             function Section:PlayerList(popts)
                 popts = popts or {}
                 local showDistance = popts.ShowDistance or false
@@ -1245,7 +1252,7 @@ function Library:Window(title, size)
                         Parent = ButtonsCol,
                     })
                     ApplyCelestiteStyle(Btn)
-                    local Lbl = Create("TextLabel", {
+                    Create("TextLabel", {
                         Text = text,
                         Size = UDim2.new(1, 0, 1, 0),
                         BackgroundTransparency = 1,
@@ -1260,20 +1267,17 @@ function Library:Window(title, size)
                         TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
                     table.insert(Library.Elements.Buttons, Btn)
-                    return Btn, Lbl
+                    return Btn
                 end
 
-                -- TP: single-press button. Spectate: toggle button.
-                local TPBtn        = mkActionBtn("TP", 1)
-                local SpectateBtn  = mkActionBtn("Spectate", 2)
+                local TPBtn       = mkActionBtn("TP", 1)
+                local SpectateBtn = mkActionBtn("Spectate", 2)
 
-                -- Spectate toggle state
                 local spectating = false
                 local function setSpectateVisual(state)
                     spectating = state
                     SpectateBtn.BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground
                 end
-                -- Register spectate toggle state so theme updates keep it in sync
                 table.insert(Library.Elements.PlayerListActionBtns, {
                     Btn = SpectateBtn,
                     IsActive = function() return spectating end,
@@ -1293,8 +1297,6 @@ function Library:Window(title, size)
                     NameRow.Text = "Display Name : " .. (player.DisplayName or player.Name)
                     UserRow.Text = "Name : " .. player.Name
                     AgeRow.Text  = "Account Age : " .. (player.AccountAge or 0)
-
-                    -- Sync spectate button to the currently-selected player's meta
                     local m = getMeta(player)
                     setSpectateVisual(m.spectate == true)
                 end
@@ -1347,7 +1349,6 @@ function Library:Window(title, size)
                         Parent = row,
                     })
                     table.insert(Library.Elements.PlayerListDividers, divider)
-
                     local click = Create("TextButton", {
                         Size = UDim2.new(1, 0, 1, 0),
                         BackgroundTransparency = 1,
@@ -1366,7 +1367,6 @@ function Library:Window(title, size)
                                 or  Library.Theme.DarkBackground
                         end
                     end)
-
                     local entry = { Row = row, Name = nameL, Status = statusL, Divider = divider }
                     table.insert(Library.Elements.PlayerListRows, entry)
                     return entry
@@ -1436,13 +1436,11 @@ function Library:Window(title, size)
                     end
                 end)
 
-                -- TP (single-press)
                 TPBtn.MouseButton1Click:Connect(function()
                     if not SelectedPlayer or not SelectedPlayer.Parent then return end
                     if popts.OnTeleport then popts.OnTeleport(SelectedPlayer) end
                 end)
 
-                -- Spectate (toggle)
                 SpectateBtn.MouseButton1Click:Connect(function()
                     if not SelectedPlayer or not SelectedPlayer.Parent then return end
                     local m = getMeta(SelectedPlayer)
@@ -1593,6 +1591,11 @@ function Library:Window(title, size)
     ToggleBtn.MouseButton1Click:Connect(function()
         uiVisible = not uiVisible
         Main.Visible = uiVisible
+
+        -- NEW: close every open popup (dropdowns / color pickers) when the UI hides
+        if not uiVisible then
+            Library:CloseAllPopups()
+        end
     end)
 
     table.insert(Library.Elements.Buttons, ToggleBtn)
