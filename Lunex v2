@@ -1,11 +1,10 @@
 --[[
-    Celestite UI Library - V2.16.2 (Full)
-    • Font: 04B03 (via RegisterFont → getcustomasset fallback)
-    • Dropdown race-condition fix
-    • Auto-sizing toggle button (default "UI Toggle")
-    • Right-side auto-width notifications
-    • Left-aligned scrollable tab columns, editable sliders
-    • Ripple on buttons, locked full-fill tabs, TP/Spectate
+    Celestite UI Library - V2.16.3 (Full)
+    • FIX: Font cache busting — new filename forces a fresh download
+    • Font: 04B03
+    • Dropdown race-condition fix, auto-sizing toggle pill,
+      right-side auto-width notifications, scrollable columns,
+      editable sliders, ripple buttons
 ]]
 
 local Players      = game:GetService("Players")
@@ -110,10 +109,11 @@ end
 --   2. writefile + getcustomasset + Font.new               (fallback)
 --   3. Enum.Font.Code                                       (last resort)
 --
---   Using 04B03 pixel font.
+--   Using 04B03 pixel font. Filename is versioned so old caches
+--   don't get reused when you change the URL.
 -------------------------------------------------
 local FONT_URL  = "https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/04B03.ttf"
-local FONT_ID   = "CelestiteFont.ttf"
+local FONT_ID   = "CelestiteFont_04B03.ttf"   -- ← new filename busts the old cache
 local FONT_NAME = "Verdana"
 
 local LoadedFont = nil
@@ -185,6 +185,22 @@ local function LoadFonts()
     FontMethod = "Enum.Font.Code"
 end
 LoadFonts()
+
+-- Helper: delete the cached font file so next execution re-downloads
+function Library:ClearFontCache()
+    if type(delfile) == "function" and type(isfile) == "function" then
+        if isfile(FONT_ID) then
+            pcall(delfile, FONT_ID)
+            print("[Celestite] Cleared font cache: " .. FONT_ID)
+            return true
+        end
+    end
+    return false
+end
+
+function Library:GetFontMethod()
+    return FontMethod
+end
 
 local function GetFont()
     return LoadedFont or Font.fromEnum(Enum.Font.Code)
@@ -1881,7 +1897,7 @@ function Library:Window(title, size)
     task.delay(0.2, function() Library:UpdateTheme() end)
 
     --=============================================================
-    -- AUTO-SIZING TOGGLE BUTTON (default label: "UI Toggle")
+    -- AUTO-SIZING TOGGLE BUTTON
     --=============================================================
     local TOGGLE_LABEL_SIZE = 14
     local TOGGLE_LABEL_PAD  = 20
