@@ -1,8 +1,8 @@
 --[[
-    Celestite UI Library - V2.15 (Full)
-    • Auto-sizing toggle button — grows/shrinks to fit its label
-    • Right-side auto-width notifications
-    • Left-aligned scrollable tab columns, editable sliders, animated dropdowns
+    Celestite UI Library - V2.15.1 (Full)
+    • FIX: Dropdown can be re-opened without waiting for the close animation
+    • Auto-sizing toggle button, right-side auto-width notifications
+    • Left-aligned scrollable tab columns, editable sliders
     • Ripple on buttons, Proggy font, locked full-fill tabs, TP/Spectate
 ]]
 
@@ -1235,6 +1235,9 @@ function Library:Window(title, size)
                 return Obj
             end
 
+            --=============================================================
+            -- DROPDOWN (with race-condition fix)
+            --=============================================================
             function Section:Dropdown(dopts)
                 local dropped = false
                 local selected = dopts.Default or (dopts.Options and dopts.Options[1]) or "None"
@@ -1287,9 +1290,12 @@ function Library:Window(title, size)
                 local dropOpen = false
                 local openTween, closeTween
 
+                -- FIX: bail out of finishClose if we've already been reopened.
+                -- Without this, cancelling the close tween (which fires Completed)
+                -- would hide the dropdown that the deferred open had just shown.
                 local function finishClose()
+                    if dropOpen then return end
                     DropOuter.Visible = false
-                    dropOpen = false
                     Arrow.Text = "v"
                     Arrow.Position = UDim2.new(1, -20, 0, -1)
                 end
@@ -1298,6 +1304,7 @@ function Library:Window(title, size)
                     if openTween then openTween:Cancel() end
                     if closeTween then closeTween:Cancel() end
                     DropInner.Position = UDim2.new(0, 0, 0, 0)
+                    dropOpen = false   -- force-close before calling finishClose
                     finishClose()
                 end)
 
@@ -1376,7 +1383,7 @@ function Library:Window(title, size)
 
                         DropInner.Position = UDim2.new(0, 0, 0, -currentListHeight)
                         DropOuter.Visible = true
-                        dropOpen = true
+                        dropOpen = true   -- set BEFORE cancelling the close tween
 
                         if openTween then openTween:Cancel() end
                         if closeTween then closeTween:Cancel() end
@@ -1824,11 +1831,10 @@ function Library:Window(title, size)
     task.delay(0.2, function() Library:UpdateTheme() end)
 
     --=============================================================
-    -- AUTO-SIZING TOGGLE BUTTON
-    --   Measures the label and grows/shrinks to fit. Default: "UI Toggle"
+    -- AUTO-SIZING TOGGLE BUTTON (default label: "UI Toggle")
     --=============================================================
     local TOGGLE_LABEL_SIZE = 14
-    local TOGGLE_LABEL_PAD  = 20    -- total horizontal padding (10 left + 10 right)
+    local TOGGLE_LABEL_PAD  = 20
     local TOGGLE_HEIGHT     = 30
 
     local function MeasureToggleWidth(text)
@@ -1893,7 +1899,6 @@ function Library:Window(title, size)
         if not uiVisible then Library:CloseAllPopups() end
     end)
 
-    -- Public API: rename AND resize the pill
     function Window:SetToggleButtonText(str)
         str = tostring(str)
         if ToggleLabel and ToggleLabel.Parent then
