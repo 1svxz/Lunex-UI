@@ -1,7 +1,8 @@
 --[[
-    Celestite UI Library - V2.8 (Full, Popup Cleanup Fix)
-    Fix: dropdowns and color pickers now close when the UI is hidden
-         via the "toggle ui" button.
+    Celestite UI Library - V2.10 (Full, Proggy-Only Font)
+    • Pixel-perfect Proggy font, locked in — no font switching
+    • Locked full-fill tabs, TP/Spectate buttons, popup cleanup on UI hide
+    • Section outlines, theme manager, config manager
 ]]
 
 local Players      = game:GetService("Players")
@@ -97,43 +98,41 @@ local function MakeDraggable(frame, handle)
 end
 
 -------------------------------------------------
--- FONT LOADING
+-- FONT SYSTEM (Proggy only)
 -------------------------------------------------
 local LoadedFonts = {}
 
 local function LoadFonts()
-    local fonts = {
-        {"Proggy", "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Proggy.txt"},
-        {"Verdana", "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Verdana.txt"},
-        {"VerdanaBold", "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Verdana%20Bold.txt"},
-        {"Tahoma", "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Tahoma.txt"}
-    }
-    for _, f in pairs(fonts) do
-        local name, url = f[1], f[2]
-        local success, err = pcall(function()
-            local ttf_path  = name .. ".ttf"
-            local json_path = name .. ".json"
-            if not isfile(ttf_path) then
-                writefile(ttf_path, b64decode(game:HttpGet(url)))
-            end
-            if not isfile(json_path) then
-                local data = {
-                    name  = name,
-                    faces = {
-                        { name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(ttf_path) }
-                    }
+    local name = "Proggy"
+    local url  = "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Proggy.txt"
+    local success, err = pcall(function()
+        local ttf_path  = name .. ".ttf"
+        local json_path = name .. ".json"
+
+        if not isfile(ttf_path) then
+            writefile(ttf_path, b64decode(game:HttpGet(url)))
+        end
+
+        if not isfile(json_path) then
+            local data = {
+                name  = name,
+                faces = {
+                    { name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(ttf_path) }
                 }
-                writefile(json_path, HttpService:JSONEncode(data))
-            end
-            LoadedFonts[name] = Font.new(getcustomasset(json_path), Enum.FontWeight.Regular)
-        end)
-        if not success then warn("Failed to load font " .. name .. ": " .. tostring(err)) end
+            }
+            writefile(json_path, HttpService:JSONEncode(data))
+        end
+
+        LoadedFonts[name] = Font.new(getcustomasset(json_path), Enum.FontWeight.Regular)
+    end)
+    if not success then
+        warn("[Celestite] Failed to load Proggy font: " .. tostring(err))
     end
 end
-pcall(LoadFonts)
+LoadFonts()
 
 local function GetFont()
-    return LoadedFonts[Library.Config.Font] or Font.fromEnum(Enum.Font.Code)
+    return LoadedFonts["Proggy"] or Font.fromEnum(Enum.Font.Code)
 end
 
 -------------------------------------------------
@@ -215,20 +214,13 @@ Library.Elements = {
     PlayerListActionBtns = {},
 }
 Library.Flags = {}
-
--- NEW: popup registry for the UI-hide cleanup
 Library.OpenPopups = {}
 
-function Library:RegisterPopup(fn)
-    table.insert(self.OpenPopups, fn)
-end
-
+function Library:RegisterPopup(fn)  table.insert(self.OpenPopups, fn) end
 function Library:CloseAllPopups()
-    local snapshot = {}
-    for i, fn in ipairs(self.OpenPopups) do snapshot[i] = fn end
-    for _, fn in ipairs(snapshot) do
-        pcall(fn)
-    end
+    local snap = {}
+    for i, fn in ipairs(self.OpenPopups) do snap[i] = fn end
+    for _, fn in ipairs(snap) do pcall(fn) end
 end
 
 function Library:UpdateTheme()
@@ -242,12 +234,8 @@ function Library:UpdateTheme()
         sec.Frame.BackgroundColor3 = Library.Theme.DarkBackground
         sec.Header.TextColor3      = Library.Theme.Text
     end
-    for _, hdr in pairs(Library.Elements.SectionHeaders) do
-        hdr.BackgroundColor3 = Library.Theme.HeaderBar
-    end
-    for _, acc in pairs(Library.Elements.SectionAccents) do
-        acc.BackgroundColor3 = Library.Theme.Accent
-    end
+    for _, hdr in pairs(Library.Elements.SectionHeaders) do hdr.BackgroundColor3 = Library.Theme.HeaderBar end
+    for _, acc in pairs(Library.Elements.SectionAccents) do acc.BackgroundColor3 = Library.Theme.Accent   end
     for _, tog in pairs(Library.Elements.Toggles) do
         tog.Box.BackgroundColor3 = tog.GetState() and Library.Theme.Accent or Library.Theme.SectionBackground
         tog.Label.TextColor3     = tog.GetState() and Library.Theme.Text or Library.Theme.InactiveText
@@ -277,12 +265,8 @@ function Library:UpdateTheme()
         tab.Accent.BackgroundColor3 = Library.Theme.Accent
         Tween(tab.Button, {TextColor3 = tab.IsActive() and Library.Theme.Text or Library.Theme.InactiveText})
     end
-    for _, lab in pairs(Library.Elements.Labels) do
-        lab.TextColor3 = Library.Theme.Text
-    end
-    for _, btn in pairs(Library.Elements.Buttons) do
-        btn.BackgroundColor3 = Library.Theme.SectionBackground
-    end
+    for _, lab in pairs(Library.Elements.Labels) do lab.TextColor3 = Library.Theme.Text end
+    for _, btn in pairs(Library.Elements.Buttons) do btn.BackgroundColor3 = Library.Theme.SectionBackground end
     for _, txt in pairs(Library.Elements.TextBoxes) do
         txt.Box.BackgroundColor3 = Library.Theme.SectionBackground
         txt.Input.TextColor3     = Library.Theme.Text
@@ -314,6 +298,7 @@ ScreenGui.Name = "CelestiteUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = (gethui and gethui()) or CoreGui
+Library.ScreenGui = ScreenGui
 
 local function AddOutline(inst)
     local out = Instance.new("UIStroke")
@@ -631,16 +616,14 @@ function Library:Window(title, size)
 
         function Tab:Section(sectionName, side, opts)
             opts = opts or {}
-
             if Tab._locked then
-                warn(("[Celestite] Cannot add section '%s' — tab '%s' is locked."):format(tostring(sectionName), tostring(TabButton.Name)))
+                warn(("[Celestite] Tab '%s' is locked — cannot add section '%s'."):format(tostring(TabButton.Name), tostring(sectionName)))
                 return nil
             end
 
             local Section = {}
             local isFull = (side and side:lower() == "full") == true
             local fill   = isFull and (opts.Fill ~= false) or (opts.Fill == true)
-
             if fill then Tab._locked = true end
 
             local parent
@@ -793,7 +776,6 @@ function Library:Window(title, size)
                     Picker.Visible = false
                     if pickerConn then pickerConn:Disconnect(); pickerConn = nil end
                 end
-                -- NEW: register this picker for the global popup cleanup
                 Library:RegisterPopup(ClosePicker)
                 CPBtn.MouseButton1Click:Connect(function()
                     if Picker.Visible then ClosePicker() else
@@ -936,7 +918,6 @@ function Library:Window(title, size)
                     local pickerConn
                     local function UpdatePos() local pos = CPHolder.AbsolutePosition; Picker.Position = UDim2.new(0, pos.X + 25, 0, pos.Y) end
                     local function ClosePicker() Picker.Visible = false; if pickerConn then pickerConn:Disconnect(); pickerConn = nil end end
-                    -- NEW: register for cleanup
                     Library:RegisterPopup(ClosePicker)
                     CPBtn.MouseButton1Click:Connect(function()
                         if Picker.Visible then ClosePicker() else
@@ -1052,7 +1033,6 @@ function Library:Window(title, size)
                 local OptionHolder = Create("ScrollingFrame", { Name = "Options", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5001, Parent = DropContainer, ScrollBarThickness = 2, CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
 
-                -- NEW: register the dropdown's close behaviour with the global popup cleanup
                 Library:RegisterPopup(function()
                     dropped = false
                     DropContainer.Visible = false
@@ -1591,11 +1571,7 @@ function Library:Window(title, size)
     ToggleBtn.MouseButton1Click:Connect(function()
         uiVisible = not uiVisible
         Main.Visible = uiVisible
-
-        -- NEW: close every open popup (dropdowns / color pickers) when the UI hides
-        if not uiVisible then
-            Library:CloseAllPopups()
-        end
+        if not uiVisible then Library:CloseAllPopups() end
     end)
 
     table.insert(Library.Elements.Buttons, ToggleBtn)
