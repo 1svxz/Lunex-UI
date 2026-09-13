@@ -1,8 +1,16 @@
 --[[
-    Celestite UI Library - V2.10 (Full, Proggy-Only Font)
-    • Pixel-perfect Proggy font, locked in — no font switching
-    • Locked full-fill tabs, TP/Spectate buttons, popup cleanup on UI hide
-    • Section outlines, theme manager, config manager
+    Celestite UI Library - V2.11 (Full, Animated)
+    • Proggy font locked in
+    • Animations everywhere:
+        - Tab page slides up on activate
+        - Toggle box pops (scale 1 → 1.25 → 1)
+        - Slider fill tweens on Set()
+        - Dropdown scales open/closed
+        - Color picker scales open/closed (Back easing)
+        - Buttons tween on hover + flash on click
+        - Notifications slide + text fade
+        - Window slides when shown/hidden via toggle button
+        - Player rows fade in when added
 ]]
 
 local Players      = game:GetService("Players")
@@ -17,12 +25,38 @@ local HttpService  = game:GetService("HttpService")
 local Library = { Config = { Font = "Proggy", FontSize = 12 } }
 
 -------------------------------------------------
--- UTILITIES
+-- EASING / TWEEN PRESETS
 -------------------------------------------------
-local function Tween(obj, props, time)
-    TweenService:Create(obj, TweenInfo.new(time or 0.15, Enum.EasingStyle.Quad), props):Play()
+local Ease = {
+    Quad_Out    = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    Quad_In     = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+    Quad_InOut  = TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+    Back_Out    = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+    Back_In     = TweenInfo.new(0.14, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+    Pop         = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    Slow_Out    = TweenInfo.new(0.30, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+}
+
+local function Tween(obj, info, props)
+    if type(info) == "number" then
+        info = TweenInfo.new(info, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    end
+    return TweenService:Create(obj, info, props)
 end
 
+local function Pop(inst, peak)
+    peak = peak or 1.25
+    inst.Scale = 1
+    local grow = Tween(inst, Ease.Pop, { Scale = peak })
+    grow:Play()
+    grow.Completed:Connect(function()
+        Tween(inst, Ease.Back_Out, { Scale = 1 }):Play()
+    end)
+end
+
+-------------------------------------------------
+-- UTILITIES
+-------------------------------------------------
 local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 local function decodeBase64(data)
     data = string.gsub(data, '[^'..b64chars..'=]', '')
@@ -125,9 +159,7 @@ local function LoadFonts()
 
         LoadedFonts[name] = Font.new(getcustomasset(json_path), Enum.FontWeight.Regular)
     end)
-    if not success then
-        warn("[Celestite] Failed to load Proggy font: " .. tostring(err))
-    end
+    if not success then warn("[Celestite] Failed to load Proggy font: " .. tostring(err)) end
 end
 LoadFonts()
 
@@ -174,7 +206,7 @@ UIS.InputBegan:Connect(function(input, gpe)
         if bind.Binding then
             if cur ~= Enum.KeyCode.Unknown then
                 if cur == Enum.UserInputType.MouseButton1 and tick() - bind.Started < 0.1 then
-                    -- skip the click that started the bind
+                    -- skip
                 else
                     bind.Binding = false
                     bind.Key = cur
@@ -263,7 +295,7 @@ function Library:UpdateTheme()
     end
     for _, tab in pairs(Library.Elements.Tabs) do
         tab.Accent.BackgroundColor3 = Library.Theme.Accent
-        Tween(tab.Button, {TextColor3 = tab.IsActive() and Library.Theme.Text or Library.Theme.InactiveText})
+        Tween(tab.Button, Ease.Quad_Out, {TextColor3 = tab.IsActive() and Library.Theme.Text or Library.Theme.InactiveText}):Play()
     end
     for _, lab in pairs(Library.Elements.Labels) do lab.TextColor3 = Library.Theme.Text end
     for _, btn in pairs(Library.Elements.Buttons) do btn.BackgroundColor3 = Library.Theme.SectionBackground end
@@ -383,12 +415,16 @@ function Library:Notification(opts)
     TLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     TLabel.ZIndex = 5
 
-    Tween(Holder, {Position = UDim2.new(0, 0, 0, 0)}, 0.3)
+    -- Entrance: slide + fade
+    TLabel.TextTransparency = 1
+    Tween(TLabel, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
+    Tween(Holder, TweenInfo.new(0.30, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
 
     task.delay(duration, function()
-        Tween(Holder, {Position = UDim2.new(-1.2, 0, 0, 0)}, 0.3)
-        task.wait(0.3)
-        Holder:Destroy()
+        local outT = Tween(Holder, TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = UDim2.new(-1.2, 0, 0, 0)})
+        outT:Play()
+        Tween(TLabel, TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {TextTransparency = 1}):Play()
+        outT.Completed:Connect(function() Holder:Destroy() end)
     end)
 end
 
@@ -488,7 +524,7 @@ function Library:Window(title, size)
         Position = UDim2.new(0, 2, 0, 33),
         BackgroundColor3 = Library.Theme.Background,
         BorderSizePixel = 0,
-        ClipsDescendants = false,
+        ClipsDescendants = true,
         ZIndex = 2,
         Parent = Main
     })
@@ -555,6 +591,7 @@ function Library:Window(title, size)
         local TabPage = Create("Frame", {
             Name = name .. "_Page",
             Size = UDim2.new(1, 0, 1, 0),
+            Position = UDim2.new(0, 0, 0, 0),
             BackgroundTransparency = 1,
             Visible = false,
             ZIndex = 2,
@@ -601,12 +638,15 @@ function Library:Window(title, size)
         local function Activate()
             for _, t in pairs(Window.Tabs) do
                 t.Page.Visible = false
-                Tween(t.Button, { TextColor3 = Library.Theme.InactiveText })
-                Tween(t.Accent, { Size = UDim2.new(0, 0, 0, 1), Position = UDim2.new(0.5, 0, 0.5, 8) })
+                Tween(t.Button, Ease.Quad_Out, { TextColor3 = Library.Theme.InactiveText }):Play()
+                Tween(t.Accent, Ease.Quad_Out, { Size = UDim2.new(0, 0, 0, 1), Position = UDim2.new(0.5, 0, 0.5, 8) }):Play()
             end
+            -- Slide-in animation for the page
             TabPage.Visible = true
-            Tween(TabButton, { TextColor3 = Library.Theme.Text })
-            Tween(TabAccent, { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0.5, 8) })
+            TabPage.Position = UDim2.new(0, 0, 0, 12)
+            Tween(TabPage, Ease.Back_Out, { Position = UDim2.new(0, 0, 0, 0) }):Play()
+            Tween(TabButton, Ease.Quad_Out, { TextColor3 = Library.Theme.Text }):Play()
+            Tween(TabAccent, Ease.Back_Out, { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0.5, 8) }):Play()
         end
 
         TabButton.MouseButton1Click:Connect(Activate)
@@ -627,13 +667,9 @@ function Library:Window(title, size)
             if fill then Tab._locked = true end
 
             local parent
-            if side and side:lower() == "right" then
-                parent = RightColumn
-            elseif isFull then
-                parent = FullColumn
-            else
-                parent = LeftColumn
-            end
+            if side and side:lower() == "right" then parent = RightColumn
+            elseif isFull then parent = FullColumn
+            else parent = LeftColumn end
 
             local SectionFrame = Create("Frame", {
                 Name = sectionName,
@@ -699,18 +735,30 @@ function Library:Window(title, size)
             Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = ElementList })
             Create("UIPadding", { PaddingBottom = UDim.new(0, fill and 0 or 9), Parent = ElementList })
 
+            -- ============================
+            -- BUTTON (hover tween + click flash)
+            -- ============================
             function Section:Button(bopts)
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
-                local Box = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Library.Theme.Background, ZIndex = 7, Parent = Holder })
+                local Box = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Library.Theme.SectionBackground, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(Box)
                 local Label = Create("TextLabel", { Text = bopts.Name or "Button", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 table.insert(Library.Elements.Buttons, Box)
                 local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 9, Parent = Box })
+
+                btn.MouseEnter:Connect(function()
+                    Tween(Box, Ease.Quad_Out, { BackgroundColor3 = Color3.fromRGB(55, 55, 60) }):Play()
+                end)
+                btn.MouseLeave:Connect(function()
+                    Tween(Box, Ease.Quad_Out, { BackgroundColor3 = Library.Theme.SectionBackground }):Play()
+                end)
                 btn.MouseButton1Click:Connect(function()
-                    Tween(Box, { BackgroundColor3 = Color3.fromRGB(45, 45, 45) }, 0.1)
-                    task.wait(0.1)
-                    Tween(Box, { BackgroundColor3 = Library.Theme.SectionBackground }, 0.1)
+                    -- flash to accent, then fade back
+                    Tween(Box, Ease.Pop, { BackgroundColor3 = Color3.fromRGB(80, 90, 130) }):Play()
+                    task.delay(0.10, function()
+                        Tween(Box, Ease.Quad_Out, { BackgroundColor3 = Library.Theme.SectionBackground }):Play()
+                    end)
                     if bopts.Callback then bopts.Callback() end
                 end)
                 return { SetText = function(t) Label.Text = t end }
@@ -730,6 +778,9 @@ function Library:Window(title, size)
                 return Obj
             end
 
+            -- ============================
+            -- COLOR PICKER (pop-scale animation)
+            -- ============================
             function Section:ColorPicker(copts)
                 local h, s, v = 0, 1, 1
                 local color = copts.Default or Color3.fromHSV(h, s, v)
@@ -740,8 +791,12 @@ function Library:Window(title, size)
                 local CPHolder = Create("Frame", { Size = UDim2.new(0, 18, 0, 10), Position = UDim2.new(1, -18, 0, 3), BackgroundColor3 = color, ZIndex = 12, Parent = Holder })
                 ApplyCelestiteStyle(CPHolder)
                 local CPBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = CPHolder })
+
                 local Picker = Create("Frame", { Size = UDim2.new(0, 160, 0, 140), BackgroundColor3 = Library.Theme.DarkBackground, Visible = false, ZIndex = 300, Parent = ScreenGui })
                 ApplyCelestiteStyle(Picker)
+                local pickerScale = Instance.new("UIScale")
+                pickerScale.Scale = 1
+                pickerScale.Parent = Picker
                 table.insert(Library.Elements.ColorPickers, { Frame = Holder, Picker = Picker })
 
                 local DragBar = Create("Frame", { Name = "DragBar", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 306, Parent = Picker })
@@ -771,16 +826,29 @@ function Library:Window(title, size)
                 Create("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1, Parent = Marker })
                 local sS, sH = false, false
                 local pickerConn
+                local closing = false
                 local function UpdatePos() local pos = CPHolder.AbsolutePosition; Picker.Position = UDim2.new(0, pos.X + 25, 0, pos.Y) end
                 local function ClosePicker()
-                    Picker.Visible = false
+                    if closing or not Picker.Visible then return end
+                    closing = true
                     if pickerConn then pickerConn:Disconnect(); pickerConn = nil end
+                    local t = Tween(pickerScale, Ease.Back_In, { Scale = 0 })
+                    t:Play()
+                    t.Completed:Connect(function()
+                        Picker.Visible = false
+                        pickerScale.Scale = 1
+                        closing = false
+                    end)
                 end
                 Library:RegisterPopup(ClosePicker)
                 CPBtn.MouseButton1Click:Connect(function()
-                    if Picker.Visible then ClosePicker() else
+                    if Picker.Visible then
+                        ClosePicker()
+                    else
                         UpdatePos()
                         Picker.Visible = true
+                        pickerScale.Scale = 0
+                        Tween(pickerScale, Ease.Back_Out, { Scale = 1 }):Play()
                         pickerConn = UIS.InputBegan:Connect(function(input)
                             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                                 if not IsWithin(Picker, input) and not IsWithin(CPHolder, input) then ClosePicker() end
@@ -824,11 +892,18 @@ function Library:Window(title, size)
                 return CPObj
             end
 
+            -- ============================
+            -- TOGGLE (pop animation + color tween)
+            -- ============================
             function Section:Toggle(topts)
                 local state = topts.Default or false
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Box = Create("Frame", { Size = UDim2.new(0, 10, 0, 10), Position = UDim2.new(0, 0, 0.5, -5), BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(Box)
+                local boxScale = Instance.new("UIScale")
+                boxScale.Scale = 1
+                boxScale.Parent = Box
+
                 local Label = Create("TextLabel", { Text = topts.Name or "Toggle", Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local RightSide = Create("Frame", { Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, ZIndex = 10, Parent = Holder })
@@ -836,8 +911,10 @@ function Library:Window(title, size)
 
                 local function Set(v)
                     state = v
-                    Tween(Box, { BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground })
-                    Tween(Label, { TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText })
+                    Tween(Box, Ease.Quad_Out, { BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground }):Play()
+                    Tween(Label, Ease.Quad_Out, { TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText }):Play()
+                    -- Box pop animation on change
+                    Pop(boxScale, 1.25)
                     if topts.Callback then topts.Callback(state) end
                 end
                 local function ToggleState()
@@ -893,6 +970,10 @@ function Library:Window(title, size)
                     local CPBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = CPHolder })
                     local Picker = Create("Frame", { Size = UDim2.new(0, 160, 0, 140), BackgroundColor3 = Library.Theme.DarkBackground, Visible = false, ZIndex = 3000, Parent = ScreenGui })
                     ApplyCelestiteStyle(Picker)
+                    local pickerScale = Instance.new("UIScale")
+                    pickerScale.Scale = 1
+                    pickerScale.Parent = Picker
+
                     local DragBar2 = Create("Frame", { Name = "DragBar", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 3006, Parent = Picker })
                     MakeDraggable(Picker, DragBar2)
                     local HueSlider = Create("Frame", { Size = UDim2.new(0, 12, 0, 120), Position = UDim2.new(1, -22, 0, 10), ZIndex = 3001, Parent = Picker })
@@ -916,13 +997,29 @@ function Library:Window(title, size)
                     local Marker = Create("Frame", { Size = UDim2.new(0, 4, 0, 4), Position = UDim2.new(s, -2, 1 - v, -2), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 3004, Parent = SVBox })
                     Create("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1, Parent = Marker })
                     local pickerConn
+                    local closing = false
                     local function UpdatePos() local pos = CPHolder.AbsolutePosition; Picker.Position = UDim2.new(0, pos.X + 25, 0, pos.Y) end
-                    local function ClosePicker() Picker.Visible = false; if pickerConn then pickerConn:Disconnect(); pickerConn = nil end end
+                    local function ClosePicker()
+                        if closing or not Picker.Visible then return end
+                        closing = true
+                        if pickerConn then pickerConn:Disconnect(); pickerConn = nil end
+                        local t = Tween(pickerScale, Ease.Back_In, { Scale = 0 })
+                        t:Play()
+                        t.Completed:Connect(function()
+                            Picker.Visible = false
+                            pickerScale.Scale = 1
+                            closing = false
+                        end)
+                    end
                     Library:RegisterPopup(ClosePicker)
                     CPBtn.MouseButton1Click:Connect(function()
-                        if Picker.Visible then ClosePicker() else
+                        if Picker.Visible then
+                            ClosePicker()
+                        else
                             UpdatePos()
                             Picker.Visible = true
+                            pickerScale.Scale = 0
+                            Tween(pickerScale, Ease.Back_Out, { Scale = 1 }):Play()
                             pickerConn = UIS.InputBegan:Connect(function(input)
                                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                                     if not IsWithin(Picker, input) and not IsWithin(CPHolder, input) then ClosePicker() end
@@ -964,6 +1061,9 @@ function Library:Window(title, size)
                 return ToggleObj
             end
 
+            -- ============================
+            -- SLIDER (tween on Set, direct on drag)
+            -- ============================
             function Section:Slider(sopts)
                 local min, max = sopts.Min, sopts.Max
                 local val = sopts.Default or min
@@ -978,16 +1078,18 @@ function Library:Window(title, size)
                 local SliderFill = Create("Frame", { Name = "Fill", Size = UDim2.new((val - min) / (max - min), 0, 1, 0), BackgroundColor3 = Library.Theme.Accent, BorderSizePixel = 0, ZIndex = 8, Parent = SliderBack })
                 table.insert(Library.Elements.Sliders, { Fill = SliderFill, Label = Label, Value = Value, Back = SliderBack })
                 local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", TextTransparency = 1, ZIndex = 10, Parent = SliderBack })
+
                 local function update(input)
                     local pct = math.clamp((input.Position.X - SliderBack.AbsolutePosition.X) / SliderBack.AbsoluteSize.X, 0, 1)
                     val = math.floor(min + (max - min) * pct)
-                    SliderFill.Size = UDim2.new(pct, 0, 1, 0)
+                    SliderFill.Size = UDim2.new(pct, 0, 1, 0)  -- direct during drag
                     Value.Text = tostring(val)
                     if sopts.Callback then sopts.Callback(val) end
                 end
                 local function Set(v)
                     val = v
-                    SliderFill.Size = UDim2.new((val - min) / (max - min), 0, 1, 0)
+                    local newSize = UDim2.new((val - min) / (max - min), 0, 1, 0)
+                    Tween(SliderFill, TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = newSize }):Play()
                     Value.Text = tostring(val)
                     if sopts.Callback then sopts.Callback(val) end
                 end
@@ -1013,6 +1115,9 @@ function Library:Window(title, size)
                 return Obj
             end
 
+            -- ============================
+            -- DROPDOWN (height tween open/close)
+            -- ============================
             function Section:Dropdown(dopts)
                 local dropped = false
                 local selected = dopts.Default or (dopts.Options and dopts.Options[1]) or "None"
@@ -1033,9 +1138,19 @@ function Library:Window(title, size)
                 local OptionHolder = Create("ScrollingFrame", { Name = "Options", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5001, Parent = DropContainer, ScrollBarThickness = 2, CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
 
+                local closing = false
+
                 Library:RegisterPopup(function()
+                    if not DropContainer.Visible then return end
                     dropped = false
-                    DropContainer.Visible = false
+                    if closing then return end
+                    closing = true
+                    local t = Tween(DropContainer, Ease.Quad_In, { Size = UDim2.new(0, DropContainer.Size.X.Offset, 0, 0) })
+                    t:Play()
+                    t.Completed:Connect(function()
+                        DropContainer.Visible = false
+                        closing = false
+                    end)
                     Arrow.Text = "v"
                     Arrow.Position = UDim2.new(1, -20, 0, -1)
                 end)
@@ -1051,11 +1166,25 @@ function Library:Window(title, size)
                         for _, option in ipairs(options) do
                             local optBtn = Create("TextButton", { Text = tostring(option), Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = (tostring(option) == tostring(selected)) and Library.Theme.Accent or Library.Theme.Text, BorderSizePixel = 0, ZIndex = 5005, Parent = OptionHolder, TextXAlignment = Enum.TextXAlignment.Left, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                             Create("UIPadding", { PaddingLeft = UDim.new(0, 6), Parent = optBtn })
+                            optBtn.MouseEnter:Connect(function()
+                                Tween(optBtn, Ease.Quad_Out, { BackgroundColor3 = Color3.fromRGB(45, 45, 55), BackgroundTransparency = 0 }):Play()
+                            end)
+                            optBtn.MouseLeave:Connect(function()
+                                Tween(optBtn, Ease.Quad_Out, { BackgroundTransparency = 1 }):Play()
+                            end)
                             optBtn.MouseButton1Click:Connect(function()
                                 selected = option
                                 ValueLabel.Text = tostring(option)
                                 dropped = false
-                                DropContainer.Visible = false
+                                if not closing then
+                                    closing = true
+                                    local t = Tween(DropContainer, Ease.Quad_In, { Size = UDim2.new(0, DropContainer.Size.X.Offset, 0, 0) })
+                                    t:Play()
+                                    t.Completed:Connect(function()
+                                        DropContainer.Visible = false
+                                        closing = false
+                                    end)
+                                end
                                 Arrow.Text = "v"
                                 Arrow.Position = UDim2.new(1, -20, 0, -1)
                                 if dopts.Callback then dopts.Callback(option) end
@@ -1066,6 +1195,7 @@ function Library:Window(title, size)
                     local h = math.clamp(#options * 18, 18, 200)
                     if #options == 0 then h = 18 end
                     DropContainer.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, h)
+                    return h
                 end
 
                 Button.MouseButton1Click:Connect(function()
@@ -1073,15 +1203,24 @@ function Library:Window(title, size)
                     if dropped then
                         if dopts.OnOpen then dopts.OnOpen() end
                         task.defer(function()
-                            UpdateList()
+                            local targetH = UpdateList()
                             DropContainer.Position = UDim2.new(0, Box.AbsolutePosition.X, 0, Box.AbsolutePosition.Y + 20)
-                            DropContainer.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, DropContainer.Size.Y.Offset)
                             DropContainer.Visible = true
+                            DropContainer.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, 0)
+                            closing = false
+                            Tween(DropContainer, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.new(0, Box.AbsoluteSize.X, 0, targetH) }):Play()
                             Arrow.Text = "^"
                             Arrow.Position = UDim2.new(1, -20, 0, 2)
                         end)
                     else
-                        DropContainer.Visible = false
+                        if closing then return end
+                        closing = true
+                        local t = Tween(DropContainer, Ease.Quad_In, { Size = UDim2.new(0, DropContainer.Size.X.Offset, 0, 0) })
+                        t:Play()
+                        t.Completed:Connect(function()
+                            DropContainer.Visible = false
+                            closing = false
+                        end)
                         Arrow.Text = "v"
                         Arrow.Position = UDim2.new(1, -20, 0, -1)
                     end
@@ -1091,7 +1230,15 @@ function Library:Window(title, size)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 and dropped then
                         if not IsWithin(DropContainer, input) and not IsWithin(Box, input) then
                             dropped = false
-                            DropContainer.Visible = false
+                            if not closing then
+                                closing = true
+                                local t = Tween(DropContainer, Ease.Quad_In, { Size = UDim2.new(0, DropContainer.Size.X.Offset, 0, 0) })
+                                t:Play()
+                                t.Completed:Connect(function()
+                                    DropContainer.Visible = false
+                                    closing = false
+                                end)
+                            end
                             Arrow.Text = "v"
                             Arrow.Position = UDim2.new(1, -20, 0, -1)
                         end
@@ -1107,6 +1254,9 @@ function Library:Window(title, size)
                 return Obj
             end
 
+            -- ============================
+            -- PLAYER LIST (row fade-in, tweened selection)
+            -- ============================
             function Section:PlayerList(popts)
                 popts = popts or {}
                 local showDistance = popts.ShowDistance or false
@@ -1256,12 +1406,30 @@ function Library:Window(title, size)
                 local spectating = false
                 local function setSpectateVisual(state)
                     spectating = state
-                    SpectateBtn.BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground
+                    Tween(SpectateBtn, Ease.Quad_Out, { BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground }):Play()
                 end
                 table.insert(Library.Elements.PlayerListActionBtns, {
                     Btn = SpectateBtn,
                     IsActive = function() return spectating end,
                 })
+
+                -- Button hover animations for detail panel
+                TPBtn.MouseEnter:Connect(function()
+                    Tween(TPBtn, Ease.Quad_Out, { BackgroundColor3 = Color3.fromRGB(55, 55, 60) }):Play()
+                end)
+                TPBtn.MouseLeave:Connect(function()
+                    Tween(TPBtn, Ease.Quad_Out, { BackgroundColor3 = Library.Theme.SectionBackground }):Play()
+                end)
+                SpectateBtn.MouseEnter:Connect(function()
+                    if not spectating then
+                        Tween(SpectateBtn, Ease.Quad_Out, { BackgroundColor3 = Color3.fromRGB(55, 55, 60) }):Play()
+                    end
+                end)
+                SpectateBtn.MouseLeave:Connect(function()
+                    if not spectating then
+                        Tween(SpectateBtn, Ease.Quad_Out, { BackgroundColor3 = Library.Theme.SectionBackground }):Play()
+                    end
+                end)
 
                 local function UpdateDetail(player)
                     if not player or not player.Parent then
@@ -1288,10 +1456,13 @@ function Library:Window(title, size)
                         Name = player.Name,
                         Size = UDim2.new(1, 0, 0, rowHeight),
                         BackgroundColor3 = Library.Theme.DarkBackground,
+                        BackgroundTransparency = 1,
                         BorderSizePixel = 0,
                         ZIndex = 6,
                         Parent = ListHolder,
                     })
+                    -- Row fade in
+                    Tween(row, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0 }):Play()
                     local nameL = Create("TextLabel", {
                         Text = player.Name,
                         Size = UDim2.new(1, -100, 1, 0),
@@ -1338,13 +1509,24 @@ function Library:Window(title, size)
                         ZIndex = 8,
                         Parent = row,
                     })
+                    click.MouseEnter:Connect(function()
+                        if SelectedPlayer ~= player then
+                            Tween(row, Ease.Quad_Out, { BackgroundColor3 = Color3.fromRGB(28, 28, 34) }):Play()
+                        end
+                    end)
+                    click.MouseLeave:Connect(function()
+                        if SelectedPlayer ~= player then
+                            Tween(row, Ease.Quad_Out, { BackgroundColor3 = Library.Theme.DarkBackground }):Play()
+                        end
+                    end)
                     click.MouseButton1Click:Connect(function()
                         SelectedPlayer = player
                         UpdateDetail(player)
                         for p, r in pairs(Rows) do
-                            r.Row.BackgroundColor3 = (p == player)
+                            local target = (p == player)
                                 and Library.Theme.SectionBackground
                                 or  Library.Theme.DarkBackground
+                            Tween(r.Row, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundColor3 = target }):Play()
                         end
                     end)
                     local entry = { Row = row, Name = nameL, Status = statusL, Divider = divider }
@@ -1394,9 +1576,9 @@ function Library:Window(title, size)
                             data.Status.Text = "None"
                             data.Status.TextColor3 = Library.Theme.InactiveText
                         end
-                        data.Row.BackgroundColor3 = (player == SelectedPlayer)
-                            and Library.Theme.SectionBackground
-                            or  Library.Theme.DarkBackground
+                        if SelectedPlayer ~= player then
+                            data.Row.BackgroundColor3 = Library.Theme.DarkBackground
+                        end
                     end
                     ListHolder.CanvasSize = UDim2.new(0, 0, 0, #players * rowHeight)
                 end
@@ -1418,6 +1600,11 @@ function Library:Window(title, size)
 
                 TPBtn.MouseButton1Click:Connect(function()
                     if not SelectedPlayer or not SelectedPlayer.Parent then return end
+                    -- Flash
+                    Tween(TPBtn, Ease.Pop, { BackgroundColor3 = Color3.fromRGB(80, 90, 130) }):Play()
+                    task.delay(0.10, function()
+                        Tween(TPBtn, Ease.Quad_Out, { BackgroundColor3 = Library.Theme.SectionBackground }):Play()
+                    end)
                     if popts.OnTeleport then popts.OnTeleport(SelectedPlayer) end
                 end)
 
@@ -1546,6 +1733,7 @@ function Library:Window(title, size)
 
     task.delay(0.2, function() Library:UpdateTheme() end)
 
+    -- Toggle UI button + window slide animation on show/hide
     local ToggleBtn = Create("TextButton", {
         Name = "ToggleUIButton",
         Text = "toggle ui",
@@ -1570,8 +1758,23 @@ function Library:Window(title, size)
     local uiVisible = true
     ToggleBtn.MouseButton1Click:Connect(function()
         uiVisible = not uiVisible
-        Main.Visible = uiVisible
-        if not uiVisible then Library:CloseAllPopups() end
+        if not uiVisible then
+            Library:CloseAllPopups()
+            -- Slide down + hide
+            local startPos = Main.Position
+            local endPos = startPos + UDim2.new(0, 0, 0, 15)
+            local t = Tween(Main, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = endPos })
+            t:Play()
+            t.Completed:Connect(function()
+                Main.Visible = false
+                Main.Position = startPos
+            end)
+        else
+            Main.Visible = true
+            local startPos = Main.Position
+            Main.Position = startPos + UDim2.new(0, 0, 0, 15)
+            Tween(Main, Ease.Back_Out, { Position = startPos }):Play()
+        end
     end)
 
     table.insert(Library.Elements.Buttons, ToggleBtn)
