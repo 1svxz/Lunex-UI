@@ -1,11 +1,10 @@
 --[[
-    Celestite UI Library - V2.11.4 (Full)
-    • Slider value label is now an editable TextBox
-        – Click the number, type a value, press Enter
-        – Out-of-range or non-numeric input reverts to the previous value
-    • Tab underline (2px, anchored to the bottom of the tab)
-    • Ripple wave on buttons, smooth sliders + color pickers
-    • Animated dropdowns (slide down on open, up on close)
+    Celestite UI Library - V2.11.5 (Full)
+    • Centered title
+    • Bottom bar with "Welcome PLAYERNAME" (left, accent) + game name (right, accent)
+    • Editable slider value field (type a number, out-of-range reverts)
+    • Animated dropdowns (slide down / up)
+    • Tab underline, ripple wave, smooth sliders + color pickers
     • Proggy-only font, locked full-fill tabs, TP/Spectate, popup cleanup
 ]]
 
@@ -28,6 +27,13 @@ local function Tween(obj, props, time, style, dir)
     )
     t:Play()
     return t
+end
+
+local function ColorToHex(c)
+    return string.format("#%02X%02X%02X",
+        math.floor(c.R * 255 + 0.5),
+        math.floor(c.G * 255 + 0.5),
+        math.floor(c.B * 255 + 0.5))
 end
 
 local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -205,6 +211,8 @@ Library.Elements = {
     PlayerListScrolls = {}, PlayerListRows = {}, PlayerListDividers = {},
     PlayerListDetails = {}, PlayerListThumbs = {}, PlayerListInfoLabels = {},
     PlayerListActionBtns = {},
+    -- NEW
+    BottomBarWelcomes = {}, BottomBarGames = {},
 }
 Library.Flags = {}
 Library.OpenPopups = {}
@@ -222,6 +230,9 @@ function Library:UpdateTheme()
         win.TitleBar.BackgroundColor3 = Library.Theme.Background
         win.Content.BackgroundColor3  = Library.Theme.Background
         win.AccentLine.BackgroundColor3 = Library.Theme.Accent
+        if win.BottomBar then
+            win.BottomBar.BackgroundColor3 = Library.Theme.Background
+        end
     end
     for _, sec in pairs(Library.Elements.Sections) do
         sec.Frame.BackgroundColor3 = Library.Theme.DarkBackground
@@ -261,6 +272,21 @@ function Library:UpdateTheme()
     end
     for _, out in pairs(Library.Elements.Outlines) do out.Color = Library.Theme.Outline end
     for _, inl in pairs(Library.Elements.Inlines)  do inl.Color = Library.Theme.Inline  end
+
+    -- Bottom bar text — rebuild welcome string with accent-colored player name
+    local accentHex = ColorToHex(Library.Theme.Accent)
+    local playerName = (Players.LocalPlayer and Players.LocalPlayer.Name) or "Player"
+    for _, lbl in pairs(Library.Elements.BottomBarWelcomes) do
+        if lbl.Parent then
+            lbl.TextColor3 = Library.Theme.Text
+            lbl.Text = string.format('Welcome <font color="%s">%s</font>', accentHex, playerName)
+        end
+    end
+    for _, lbl in pairs(Library.Elements.BottomBarGames) do
+        if lbl.Parent then
+            lbl.TextColor3 = Library.Theme.Accent
+        end
+    end
 
     for _, ps  in pairs(Library.Elements.PlayerListScrolls)    do ps.ScrollBarImageColor3 = Library.Theme.Accent end
     for _, pd  in pairs(Library.Elements.PlayerListDetails)    do pd.BackgroundColor3     = Library.Theme.Background end
@@ -477,17 +503,17 @@ function Library:Window(title, size)
     })
     AddInlineOutline(TitleBar)
 
+    -- CENTERED title (spans the whole title bar)
     Create("TextLabel", {
         Name = "Title",
         Text = title or "Celestite",
-        Size = UDim2.new(0, 0, 1, 0),
-        AutomaticSize = Enum.AutomaticSize.X,
-        Position = UDim2.new(0, 8, 0, 0),
+        Size = UDim2.new(1, 0, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
         BackgroundTransparency = 1,
         FontFace = true,
         TextSize = Library.Config.FontSize,
         TextColor3 = Library.Theme.Text,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        TextXAlignment = Enum.TextXAlignment.Center,
         ZIndex = 3,
         Parent = TitleBar,
         TextStrokeTransparency = 0,
@@ -499,7 +525,7 @@ function Library:Window(title, size)
         Size = UDim2.new(1, -100, 1, 0),
         Position = UDim2.new(0, 100, 0, 0),
         BackgroundTransparency = 1,
-        ZIndex = 2,
+        ZIndex = 4,   -- above the title so tabs are clickable
         Parent = TitleBar
     })
     Create("UIListLayout", {
@@ -512,9 +538,10 @@ function Library:Window(title, size)
     })
     Create("UIPadding", { PaddingRight = UDim.new(0, 10), Parent = TabBar })
 
+    -- Shrunk content area (leaves room for the bottom bar)
     local ContentArea = Create("Frame", {
         Name = "Content",
-        Size = UDim2.new(1, -4, 1, -35),
+        Size = UDim2.new(1, -4, 1, -60),
         Position = UDim2.new(0, 2, 0, 33),
         BackgroundColor3 = Library.Theme.Background,
         BorderSizePixel = 0,
@@ -524,12 +551,85 @@ function Library:Window(title, size)
     })
     AddInlineOutline(ContentArea)
 
+    --=============================================================
+    -- BOTTOM BAR
+    --=============================================================
+    local BottomBar = Create("Frame", {
+        Name = "BottomBar",
+        Size = UDim2.new(1, -4, 0, 22),
+        Position = UDim2.new(0, 2, 1, -24),
+        BackgroundColor3 = Library.Theme.Background,
+        BorderSizePixel = 0,
+        ZIndex = 2,
+        Parent = Main,
+    })
+    AddInlineOutline(BottomBar)
+
+    -- Left: "Welcome PLAYERNAME" — RichText so the name can be accent-colored
+    local WelcomeLabel = Create("TextLabel", {
+        Name = "Welcome",
+        Text = "",
+        Size = UDim2.new(0.5, -8, 1, 0),
+        Position = UDim2.new(0, 8, 0, 0),
+        BackgroundTransparency = 1,
+        FontFace = true,
+        TextSize = Library.Config.FontSize,
+        TextColor3 = Library.Theme.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        RichText = true,
+        ZIndex = 3,
+        Parent = BottomBar,
+        TextStrokeTransparency = 0,
+        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+    })
+    table.insert(Library.Elements.BottomBarWelcomes, WelcomeLabel)
+
+    -- Right: game name (accent-colored)
+    local GameLabel = Create("TextLabel", {
+        Name = "GameName",
+        Text = "Loading…",
+        Size = UDim2.new(0.5, -8, 1, 0),
+        Position = UDim2.new(0.5, 0, 0, 0),
+        BackgroundTransparency = 1,
+        FontFace = true,
+        TextSize = Library.Config.FontSize,
+        TextColor3 = Library.Theme.Accent,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 3,
+        Parent = BottomBar,
+        TextStrokeTransparency = 0,
+        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+    })
+    table.insert(Library.Elements.BottomBarGames, GameLabel)
+
+    -- Initial welcome text (player name in accent via RichText)
+    do
+        local accentHex = ColorToHex(Library.Theme.Accent)
+        local playerName = (Players.LocalPlayer and Players.LocalPlayer.Name) or "Player"
+        WelcomeLabel.Text = string.format('Welcome <font color="%s">%s</font>', accentHex, playerName)
+    end
+
+    -- Async fetch of the game name via MarketplaceService
+    task.spawn(function()
+        local fetchedName = "Roblox"
+        pcall(function()
+            fetchedName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
+        end)
+        if GameLabel and GameLabel.Parent then
+            GameLabel.Text = fetchedName
+        end
+    end)
+
     table.insert(Library.Elements.Windows, {
-        Main = Main, TitleBar = TitleBar, Content = ContentArea, AccentLine = AccentLine
+        Main = Main, TitleBar = TitleBar, Content = ContentArea,
+        AccentLine = AccentLine, BottomBar = BottomBar,
     })
 
     MakeDraggable(Main, TitleBar)
 
+    -- Edge drag handles
     do
         local EDGE = 5
         local edgeSpecs = {
@@ -548,6 +648,13 @@ function Library:Window(title, size)
         end
     end
 
+    -- Public API: override the game name
+    function Window:SetGameName(name)
+        if GameLabel and GameLabel.Parent then
+            GameLabel.Text = tostring(name)
+        end
+    end
+
     function Window:Tab(name)
         local Tab = {}
 
@@ -559,7 +666,7 @@ function Library:Window(title, size)
             FontFace = true,
             TextSize = Library.Config.FontSize,
             TextColor3 = Library.Theme.InactiveText,
-            AutoButtonColor = false, ZIndex = 3,
+            AutoButtonColor = false, ZIndex = 5,
             Parent = TabBar,
             TextStrokeTransparency = 0,
             TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
@@ -572,7 +679,7 @@ function Library:Window(title, size)
             Position    = UDim2.new(0.5, 0, 1, 0),
             Size        = UDim2.new(0, 0, 0, 2),
             BackgroundColor3 = Library.Theme.Accent,
-            BorderSizePixel = 0, ZIndex = 5, Parent = TabButton,
+            BorderSizePixel = 0, ZIndex = 6, Parent = TabButton,
         })
 
         local TabPage = Create("Frame", {
@@ -968,7 +1075,7 @@ function Library:Window(title, size)
             end
 
             --=================================================================
-            -- SLIDER  (value is now an editable TextBox)
+            -- SLIDER (editable value field)
             --=================================================================
             function Section:Slider(sopts)
                 local min, max = sopts.Min, sopts.Max
@@ -977,7 +1084,6 @@ function Library:Window(title, size)
 
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
 
-                -- Editable value field (right-aligned, transparent)
                 local Value = Create("TextBox", {
                     Text = tostring(val),
                     Size = UDim2.new(0, 60, 0, 14),
@@ -988,10 +1094,8 @@ function Library:Window(title, size)
                     TextColor3 = Library.Theme.Text,
                     TextXAlignment = Enum.TextXAlignment.Right,
                     ClearTextOnFocus = false,
-                    ZIndex = 7,
-                    Parent = Holder,
-                    TextStrokeTransparency = 0,
-                    TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                    ZIndex = 7, Parent = Holder,
+                    TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                 })
                 table.insert(Library.Elements.Labels, Value)
 
@@ -1041,12 +1145,10 @@ function Library:Window(title, size)
                     if fireCallback ~= false and sopts.Callback then sopts.Callback(val) end
                 end
 
-                -- Programmatic setter (used by Library.Flags and by dragging)
                 local function Set(v, fireCallback)
                     applyValue(v, fireCallback)
                 end
 
-                -- Drag handler
                 local function update(input)
                     local pct = math.clamp((input.Position.X - SliderBack.AbsolutePosition.X) / SliderBack.AbsoluteSize.X, 0, 1)
                     applyValue(min + (max - min) * pct, true)
@@ -1070,13 +1172,11 @@ function Library:Window(title, size)
                 end)
                 UIS.WindowFocusReleased:Connect(function() sliding = false end)
 
-                -- Editable value field: parse on focus lost / Enter, revert if invalid
-                Value.FocusLost:Connect(function(enterPressed)
+                Value.FocusLost:Connect(function()
                     local parsed = tonumber(Value.Text)
                     if parsed and parsed >= min and parsed <= max then
                         applyValue(parsed, true)
                     else
-                        -- Not a number, or out of range → snap back to current value
                         Value.Text = tostring(val)
                     end
                 end)
@@ -1087,7 +1187,7 @@ function Library:Window(title, size)
             end
 
             --=================================================================
-            -- DROPDOWN WITH SLIDE ANIMATION
+            -- DROPDOWN (slide animation)
             --=================================================================
             function Section:Dropdown(dopts)
                 local dropped = false
@@ -1109,10 +1209,8 @@ function Library:Window(title, size)
                 local DropOuter = Create("Frame", {
                     Name = "DropContainer",
                     BackgroundTransparency = 1,
-                    Visible = false,
-                    ClipsDescendants = true,
-                    ZIndex = 5000,
-                    Parent = ScreenGui,
+                    Visible = false, ClipsDescendants = true,
+                    ZIndex = 5000, Parent = ScreenGui,
                 })
                 local DropInner = Create("Frame", {
                     Name = "DropInner",
@@ -1120,8 +1218,7 @@ function Library:Window(title, size)
                     BorderSizePixel = 0,
                     Size = UDim2.new(1, 0, 1, 0),
                     Position = UDim2.new(0, 0, 0, 0),
-                    ZIndex = 5001,
-                    Parent = DropOuter,
+                    ZIndex = 5001, Parent = DropOuter,
                 })
                 ApplyCelestiteStyle(DropInner)
                 table.insert(Library.Elements.Dropdowns, {
