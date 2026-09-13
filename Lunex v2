@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.17 (Full)
+    Celestite UI Library - V2.18 (Full)
     • Font: Enum.Font.SourceSansBold (built-in, no downloads)
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
@@ -7,6 +7,7 @@
     • Left-aligned scrollable tab columns, editable sliders
     • Ripple on buttons, locked full-fill tabs, TP/Spectate
     • V2.18: 3-layer keybind box (Outline / DarkBackground / Inline stroke)
+    • V2.18: Watermark matching topbar design (accent line + inline outline)
 ]]
 
 local Players      = game:GetService("Players")
@@ -177,6 +178,7 @@ Library.Elements = {
     TabScrolls = {},
     ToggleBtns = {}, ToggleBtnStripes = {}, ToggleBtnLabels = {},
     KeybindBoxes = {},
+    Watermarks = {}, WatermarkAccents = {}, WatermarkLabels = {},
 }
 Library.Flags = {}
 Library.OpenPopups = {}
@@ -264,6 +266,17 @@ function Library:UpdateTheme()
         if kb.Stroke and kb.Stroke.Parent then
             kb.Stroke.Color = Library.Theme.Inline
         end
+    end
+
+    -- ─── Watermarks ───
+    for _, wm in pairs(Library.Elements.Watermarks) do
+        if wm.Parent then wm.BackgroundColor3 = Library.Theme.Background end
+    end
+    for _, acc in pairs(Library.Elements.WatermarkAccents) do
+        if acc.Parent then acc.BackgroundColor3 = Library.Theme.Accent end
+    end
+    for _, lbl in pairs(Library.Elements.WatermarkLabels) do
+        if lbl.Parent then lbl.TextColor3 = Library.Theme.Text end
     end
 
     local accentHex = ColorToHex(Library.Theme.Accent)
@@ -1943,6 +1956,84 @@ function Library:Window(title, size)
             Tween(ToggleBtn, {
                 Size = UDim2.new(0, MeasureToggleWidth(str), 0, TOGGLE_HEIGHT)
             }, 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        end
+    end
+
+    --=============================================================
+    -- WATERMARK (matches topbar design)
+    --=============================================================
+    local WM_HEIGHT = 26
+    local WM_PAD_H  = 12
+
+    local function MeasureWatermarkWidth(text)
+        local b = TextService:GetTextSize(
+            tostring(text),
+            Library.Config.FontSize,
+            UI_FONT,
+            Vector2.new(500, 100)
+        )
+        return math.max(80, math.ceil(b.X) + WM_PAD_H * 2)
+    end
+
+    local Watermark = Create("Frame", {
+        Name = "Watermark",
+        AnchorPoint = Vector2.new(1, 0),
+        Size = UDim2.new(0, MeasureWatermarkWidth("Celestite"), 0, WM_HEIGHT),
+        Position = UDim2.new(1, -20, 0, 20),
+        BackgroundColor3 = Library.Theme.Background,
+        BorderSizePixel = 0,
+        ZIndex = 9999,
+        Parent = ScreenGui,
+    })
+    ApplyCelestiteStyle(Watermark)
+    table.insert(Library.Elements.Watermarks, Watermark)
+
+    -- Accent line (mirrors the topbar's AccentLine)
+    local WmAccent = Create("Frame", {
+        Name = "AccentLine",
+        Size = UDim2.new(1, -2, 0, 1),
+        Position = UDim2.new(0, 1, 0, 1),
+        BackgroundColor3 = Library.Theme.Accent,
+        BorderSizePixel = 0,
+        ZIndex = 10001,
+        Parent = Watermark,
+    })
+    table.insert(Library.Elements.WatermarkAccents, WmAccent)
+
+    local WmLabel = Create("TextLabel", {
+        Name = "Label",
+        Text = "Celestite",
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Font = UI_FONT,
+        TextSize = Library.Config.FontSize,
+        TextColor3 = Library.Theme.Text,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 10002,
+        Parent = Watermark,
+        TextStrokeTransparency = 0,
+        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+    })
+    table.insert(Library.Elements.WatermarkLabels, WmLabel)
+
+    MakeDraggable(Watermark)
+
+    function Window:SetWatermarkText(str)
+        str = tostring(str)
+        if WmLabel and WmLabel.Parent then
+            WmLabel.Text = str
+        end
+        if Watermark and Watermark.Parent then
+            Tween(Watermark, {
+                Size = UDim2.new(0, MeasureWatermarkWidth(str), 0, WM_HEIGHT)
+            }, 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        end
+    end
+
+    function Window:SetWatermarkVisible(state)
+        if Watermark and Watermark.Parent then
+            Watermark.Visible = state and true or false
         end
     end
 
