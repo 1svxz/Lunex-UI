@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.18 (Full)
+    Celestite UI Library - V2.19 (Full + Extras)
     • Font: Enum.Font.SourceSansBold (built-in, no downloads)
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
@@ -8,6 +8,7 @@
     • Ripple on buttons, locked full-fill tabs, TP/Spectate
     • V2.18: 3-layer keybind box (Outline / DarkBackground / Inline stroke)
     • V2.18: Watermark matching topbar design (accent line + inline outline)
+    • V2.19: Added Divider, Label (+ColorPicker / +Keybind), MultiDropdown
 ]]
 
 local Players      = game:GetService("Players")
@@ -179,6 +180,7 @@ Library.Elements = {
     ToggleBtns = {}, ToggleBtnStripes = {}, ToggleBtnLabels = {},
     KeybindBoxes = {},
     Watermarks = {}, WatermarkAccents = {}, WatermarkLabels = {},
+    Dividers = {}, MultiDropdowns = {},
 }
 Library.Flags = {}
 Library.OpenPopups = {}
@@ -222,6 +224,12 @@ function Library:UpdateTheme()
         if drop.ValueLabel then drop.ValueLabel.TextColor3 = Library.Theme.Text end
         if drop.Arrow then drop.Arrow.TextColor3 = Library.Theme.Text end
     end
+    for _, md in pairs(Library.Elements.MultiDropdowns) do
+        if md.Container and md.Container.Parent then md.Container.BackgroundColor3 = Library.Theme.DarkBackground end
+        if md.Box and md.Box.Parent then md.Box.BackgroundColor3 = Library.Theme.SectionBackground end
+        if md.ValueLabel and md.ValueLabel.Parent then md.ValueLabel.TextColor3 = Library.Theme.Text end
+        if md.Arrow and md.Arrow.Parent then md.Arrow.TextColor3 = Library.Theme.Text end
+    end
     for _, cp in pairs(Library.Elements.ColorPickers) do
         cp.Frame.BackgroundColor3 = Library.Theme.SectionBackground
         if cp.Picker then cp.Picker.BackgroundColor3 = Library.Theme.DarkBackground end
@@ -238,6 +246,9 @@ function Library:UpdateTheme()
     end
     for _, out in pairs(Library.Elements.Outlines) do out.Color = Library.Theme.Outline end
     for _, inl in pairs(Library.Elements.Inlines)  do inl.Color = Library.Theme.Inline  end
+    for _, div in pairs(Library.Elements.Dividers) do
+        if div.Parent then div.BackgroundColor3 = Library.Theme.Inline end
+    end
 
     for _, scroll in pairs(Library.Elements.TabScrolls) do
         if scroll and scroll.Parent then
@@ -1011,11 +1022,6 @@ function Library:Window(title, size)
                 function ToggleObj:Keybind(kopts)
                     local bind = { Key = kopts.Default or Enum.KeyCode.X, Binding = false, Started = 0, Label = nil, OnTrigger = ToggleState, Callback = kopts.Callback }
 
-                    -- ─── Keybind box ───
-                    -- 3-layer stack:
-                    --   PickOuter        → 1px dark outline      (Theme.Outline)
-                    --   PickInner        → darker interior       (Theme.DarkBackground)
-                    --   PickInlineStroke → 1px inner border      (Theme.Inline)
                     local PickOuter = Create("Frame", {
                         Name = "KeybindBox",
                         BackgroundColor3 = Library.Theme.Outline,
@@ -1024,7 +1030,6 @@ function Library:Window(title, size)
                         ZIndex = 12,
                         Parent = RightSide,
                     })
-
                     local PickInner = Create("Frame", {
                         Name = "Inner",
                         BackgroundColor3 = Library.Theme.DarkBackground,
@@ -1034,7 +1039,6 @@ function Library:Window(title, size)
                         ZIndex = 13,
                         Parent = PickOuter,
                     })
-
                     local PickStrokeHolder = Create("Frame", {
                         Name = "StrokeHolder",
                         BackgroundTransparency = 1,
@@ -1042,14 +1046,12 @@ function Library:Window(title, size)
                         ZIndex = 14,
                         Parent = PickInner,
                     })
-
                     local PickInlineStroke = Create("UIStroke", {
                         Color = Library.Theme.Inline,
                         Thickness = 1,
                         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
                         Parent = PickStrokeHolder,
                     })
-
                     table.insert(Library.Elements.KeybindBoxes, {
                         Outer  = PickOuter,
                         Inner  = PickInner,
@@ -1290,7 +1292,6 @@ function Library:Window(title, size)
             end
 
             function Section:Dropdown(dopts)
-                local dropped = false
                 local selected = dopts.Default or (dopts.Options and dopts.Options[1]) or "None"
                 local Holder = Create("Frame", { Name = "DropdownHolder", Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Label = Create("TextLabel", { Text = dopts.Name, Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
@@ -1493,6 +1494,610 @@ function Library:Window(title, size)
                     Refresh = function(new) UpdateList(new) end,
                 }
                 Library.Flags[dopts.Flag or dopts.Name] = Obj
+                return Obj
+            end
+
+            -------------------------------------------------
+            -- DIVIDER (NEW)
+            -------------------------------------------------
+            function Section:Divider(dopts)
+                dopts = dopts or {}
+                local Holder = Create("Frame", {
+                    Size = UDim2.new(1, 0, 0, dopts.Spacing or 8),
+                    BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList,
+                })
+                local Line = Create("Frame", {
+                    Size = UDim2.new(1, 0, 0, dopts.Thickness or 1),
+                    Position = UDim2.new(0, 0, 0.5, 0),
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    BackgroundColor3 = dopts.Color or Library.Theme.Inline,
+                    BorderSizePixel = 0, ZIndex = 7, Parent = Holder,
+                })
+                table.insert(Library.Elements.Dividers, Line)
+                return {
+                    SetColor = function(c) Line.BackgroundColor3 = c end,
+                    SetVisible = function(v) Holder.Visible = v end,
+                }
+            end
+
+            -------------------------------------------------
+            -- LABEL (+ :ColorPicker / :Keybind)  (NEW)
+            -------------------------------------------------
+            function Section:Label(lopts)
+                lopts = lopts or {}
+
+                local Holder = Create("Frame", {
+                    Size = UDim2.new(1, 0, 0, lopts.Height or 16),
+                    BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList,
+                })
+
+                local Text = Create("TextLabel", {
+                    Text = lopts.Name or "Label",
+                    Size = UDim2.new(1, -10, 1, 0),
+                    Position = UDim2.new(0, 10, 0, 0),
+                    BackgroundTransparency = 1,
+                    Font = UI_FONT,
+                    TextSize = Library.Config.FontSize,
+                    TextColor3 = lopts.Color or Library.Theme.Text,
+                    TextXAlignment = lopts.Center and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Center,
+                    ZIndex = 7, Parent = Holder,
+                    TextStrokeTransparency = 0,
+                    TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                })
+                table.insert(Library.Elements.Labels, Text)
+
+                local RightSide = Create("Frame", {
+                    Size = UDim2.new(1, -10, 1, 0),
+                    Position = UDim2.new(0, 10, 0, 0),
+                    BackgroundTransparency = 1, ZIndex = 10, Parent = Holder,
+                })
+                Create("UIListLayout", {
+                    FillDirection = Enum.FillDirection.Horizontal,
+                    HorizontalAlignment = Enum.HorizontalAlignment.Right,
+                    VerticalAlignment = Enum.VerticalAlignment.Center,
+                    Padding = UDim.new(0, 8),
+                    SortOrder = Enum.SortOrder.LayoutOrder,
+                    Parent = RightSide,
+                })
+
+                local LabelObj = { _holder = Holder, _text = Text, _right = RightSide }
+
+                function LabelObj:SetText(t)   Text.Text = tostring(t); return self end
+                function LabelObj:GetText()    return Text.Text end
+                function LabelObj:SetColor(c)  Text.TextColor3 = c; return self end
+
+                function LabelObj:ColorPicker(copts)
+                    copts = copts or {}
+                    local color = copts.Default or Color3.fromHSV(0, 1, 1)
+                    local h, s, v = Color3.toHSV(color)
+
+                    local CPHolder = Create("Frame", {
+                        Size = UDim2.new(0, 18, 0, 10),
+                        BackgroundColor3 = color,
+                        ZIndex = 12, Parent = RightSide,
+                    })
+                    ApplyCelestiteStyle(CPHolder)
+                    local CPBtn = Create("TextButton", {
+                        Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1, Text = "",
+                        ZIndex = 13, Parent = CPHolder,
+                    })
+
+                    local Picker = Create("Frame", {
+                        Size = UDim2.new(0, 160, 0, 140),
+                        BackgroundColor3 = Library.Theme.DarkBackground,
+                        Visible = false, ZIndex = 3000, Parent = ScreenGui,
+                    })
+                    ApplyCelestiteStyle(Picker)
+                    table.insert(Library.Elements.ColorPickers, { Frame = Holder, Picker = Picker })
+
+                    local DragBar = Create("Frame", {
+                        Name = "DragBar", Size = UDim2.new(1, 0, 0, 8),
+                        Position = UDim2.new(0, 0, 0, 0),
+                        BackgroundColor3 = Library.Theme.Background,
+                        BorderSizePixel = 0, ZIndex = 3006, Parent = Picker,
+                    })
+                    MakeDraggable(Picker, DragBar)
+
+                    local HueSlider = Create("Frame", {
+                        Size = UDim2.new(0, 12, 0, 120),
+                        Position = UDim2.new(1, -22, 0, 10),
+                        ZIndex = 3001, Parent = Picker,
+                    })
+                    ApplyCelestiteStyle(HueSlider)
+                    Create("UIGradient", {
+                        Rotation = 90,
+                        Color = ColorSequence.new({
+                            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+                            ColorSequenceKeypoint.new(0.167, Color3.fromRGB(255, 255, 0)),
+                            ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0, 255, 0)),
+                            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+                            ColorSequenceKeypoint.new(0.667, Color3.fromRGB(0, 0, 255)),
+                            ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255, 0, 255)),
+                            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+                        }),
+                        Parent = HueSlider,
+                    })
+                    local HueMarker = Create("Frame", {
+                        Size = UDim2.new(1, 4, 0, 2),
+                        Position = UDim2.new(0, -2, h, 0),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        ZIndex = 3002, Parent = HueSlider,
+                    })
+
+                    local SVBox = Create("Frame", {
+                        Size = UDim2.new(0, 120, 0, 120),
+                        Position = UDim2.new(0, 10, 0, 10),
+                        BackgroundColor3 = Color3.fromHSV(h, 1, 1),
+                        ZIndex = 3001, Parent = Picker,
+                    })
+                    ApplyCelestiteStyle(SVBox)
+                    local SatGradient = Create("Frame", {
+                        Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        ZIndex = 3002, Parent = SVBox,
+                    })
+                    Create("UIGradient", {
+                        Color = ColorSequence.new(Color3.new(1, 1, 1)),
+                        Transparency = NumberSequence.new(0, 1),
+                        Parent = SatGradient,
+                    })
+                    local ValGradient = Create("Frame", {
+                        Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundColor3 = Color3.new(0, 0, 0),
+                        ZIndex = 3003, Parent = SVBox,
+                    })
+                    Create("UIGradient", {
+                        Rotation = 90,
+                        Color = ColorSequence.new(Color3.new(0, 0, 0)),
+                        Transparency = NumberSequence.new(1, 0),
+                        Parent = ValGradient,
+                    })
+                    local Marker = Create("Frame", {
+                        Size = UDim2.new(0, 4, 0, 4),
+                        Position = UDim2.new(s, -2, 1 - v, -2),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        ZIndex = 3004, Parent = SVBox,
+                    })
+                    Create("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1, Parent = Marker })
+
+                    local pickerConn
+                    local function UpdatePos()
+                        local pos = CPHolder.AbsolutePosition
+                        Picker.Position = UDim2.new(0, pos.X + 25, 0, pos.Y)
+                    end
+                    local function ClosePicker()
+                        Picker.Visible = false
+                        if pickerConn then pickerConn:Disconnect(); pickerConn = nil end
+                    end
+                    Library:RegisterPopup(ClosePicker)
+                    CPBtn.MouseButton1Click:Connect(function()
+                        if Picker.Visible then ClosePicker() else
+                            UpdatePos(); Picker.Visible = true
+                            pickerConn = UIS.InputBegan:Connect(function(input)
+                                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                                    if not IsWithin(Picker, input) and not IsWithin(CPHolder, input) then
+                                        ClosePicker()
+                                    end
+                                end
+                            end)
+                        end
+                    end)
+
+                    local function tweenMarker(m, target)
+                        Tween(m, { Position = target }, 0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                    end
+
+                    local sS, sH = false, false
+                    local function Update()
+                        color = Color3.fromHSV(h, s, v)
+                        Tween(CPHolder, { BackgroundColor3 = color }, 0.15)
+                        Tween(SVBox, { BackgroundColor3 = Color3.fromHSV(h, 1, 1) }, 0.15)
+                        if copts.Callback then copts.Callback(color) end
+                    end
+                    local function IsPInput(t) return t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch end
+                    local function IsPMove(t)  return t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch end
+                    SVBox.InputBegan:Connect(function(i) if IsPInput(i.UserInputType) then sS = true end end)
+                    HueSlider.InputBegan:Connect(function(i) if IsPInput(i.UserInputType) then sH = true end end)
+                    UIS.InputEnded:Connect(function(i) if IsPInput(i.UserInputType) then sS = false; sH = false end end)
+                    UIS.InputChanged:Connect(function(i)
+                        if IsPMove(i.UserInputType) then
+                            if sS then
+                                local relX = math.clamp((i.Position.X - SVBox.AbsolutePosition.X) / SVBox.AbsoluteSize.X, 0, 1)
+                                local relY = math.clamp((i.Position.Y - SVBox.AbsolutePosition.Y) / SVBox.AbsoluteSize.Y, 0, 1)
+                                s, v = relX, 1 - relY
+                                tweenMarker(Marker, UDim2.new(s, -2, 1 - v, -2))
+                                Update()
+                            elseif sH then
+                                h = math.clamp((i.Position.Y - HueSlider.AbsolutePosition.Y) / HueSlider.AbsoluteSize.Y, 0, 1)
+                                tweenMarker(HueMarker, UDim2.new(0, -2, h, 0))
+                                Update()
+                            end
+                        end
+                    end)
+
+                    return self
+                end
+
+                function LabelObj:Keybind(kopts)
+                    kopts = kopts or {}
+                    local bind = {
+                        Key = kopts.Default or Enum.KeyCode.X,
+                        Binding = false, Started = 0, Label = nil,
+                        OnTrigger = kopts.OnTrigger or function() end,
+                        Callback = kopts.Callback,
+                    }
+
+                    local PickOuter = Create("Frame", {
+                        Name = "KeybindBox",
+                        BackgroundColor3 = Library.Theme.Outline,
+                        BorderSizePixel = 0,
+                        Size = UDim2.new(0, 32, 0, 15),
+                        ZIndex = 12, Parent = RightSide,
+                    })
+                    local PickInner = Create("Frame", {
+                        Name = "Inner",
+                        BackgroundColor3 = Library.Theme.DarkBackground,
+                        BorderSizePixel = 0,
+                        Position = UDim2.new(0, 1, 0, 1),
+                        Size = UDim2.new(1, -2, 1, -2),
+                        ZIndex = 13, Parent = PickOuter,
+                    })
+                    local PickStrokeHolder = Create("Frame", {
+                        Name = "StrokeHolder", BackgroundTransparency = 1,
+                        Size = UDim2.new(1, 0, 1, 0), ZIndex = 14, Parent = PickInner,
+                    })
+                    local PickInlineStroke = Create("UIStroke", {
+                        Color = Library.Theme.Inline, Thickness = 1,
+                        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                        Parent = PickStrokeHolder,
+                    })
+                    table.insert(Library.Elements.KeybindBoxes, {
+                        Outer = PickOuter, Inner = PickInner, Stroke = PickInlineStroke,
+                    })
+
+                    local KLabel = Create("TextLabel", {
+                        Text = GetKeyName(bind.Key),
+                        Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1,
+                        Font = UI_FONT,
+                        TextSize = Library.Config.FontSize,
+                        TextColor3 = Library.Theme.Text,
+                        TextXAlignment = Enum.TextXAlignment.Center,
+                        TextYAlignment = Enum.TextYAlignment.Center,
+                        ZIndex = 15, Parent = PickInner,
+                        TextStrokeTransparency = 0,
+                        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                    })
+                    bind.Label = KLabel
+                    table.insert(Library.Elements.Labels, KLabel)
+
+                    local BindBtn = Create("TextButton", {
+                        Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1, Text = "",
+                        ZIndex = 16, Parent = PickOuter,
+                    })
+                    BindBtn.MouseButton1Click:Connect(function()
+                        if bind.Binding then return end
+                        bind.Binding = true; bind.Started = tick()
+                        KLabel.Text = "?"; KLabel.TextColor3 = Library.Theme.Accent
+                    end)
+                    UIS.InputBegan:Connect(function(input)
+                        if bind.Binding and (tick() - bind.Started) > 0.01 then
+                            if input.UserInputType == Enum.UserInputType.Keyboard
+                               or input.UserInputType.Name:find("MouseButton") then
+                                bind.Binding = false
+                                bind.Key = (input.UserInputType == Enum.UserInputType.Keyboard)
+                                    and input.KeyCode or input.UserInputType
+                                KLabel.Text = GetKeyName(bind.Key)
+                                KLabel.TextColor3 = Library.Theme.Text
+                                if bind.Callback then bind.Callback(bind.Key) end
+                            end
+                        end
+                    end)
+                    table.insert(Library.Registry, bind)
+                    return self
+                end
+
+                Library.Flags[lopts.Flag or lopts.Name] = LabelObj
+                return LabelObj
+            end
+
+            -------------------------------------------------
+            -- MULTI DROPDOWN (NEW)
+            -------------------------------------------------
+            function Section:MultiDropdown(mopts)
+                mopts = mopts or {}
+                local options = mopts.Options or {}
+                local selectedSet = {}
+                if mopts.Default then
+                    for _, v in ipairs(mopts.Default) do selectedSet[v] = true end
+                end
+
+                local function GetSelectedList()
+                    local list = {}
+                    for _, opt in ipairs(options) do
+                        if selectedSet[opt] then list[#list + 1] = opt end
+                    end
+                    return list
+                end
+
+                local function FormatDisplay()
+                    local list = GetSelectedList()
+                    if #list == 0 then return "None" end
+                    if #list <= 2 then return table.concat(list, ", ") end
+                    return list[1] .. ", " .. list[2] .. " (+" .. (#list - 2) .. ")"
+                end
+
+                local Holder = Create("Frame", {
+                    Size = UDim2.new(1, 0, 0, 36),
+                    BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList,
+                })
+                local Label = Create("TextLabel", {
+                    Text = mopts.Name or "Multi Dropdown",
+                    Size = UDim2.new(1, 0, 0, 12),
+                    BackgroundTransparency = 1, Font = UI_FONT,
+                    TextSize = Library.Config.FontSize,
+                    TextColor3 = Library.Theme.Text,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    ZIndex = 7, Parent = Holder,
+                    TextStrokeTransparency = 0,
+                    TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                })
+                table.insert(Library.Elements.Labels, Label)
+
+                local Box = Create("Frame", {
+                    Name = "MultiBox",
+                    Size = UDim2.new(1, 0, 0, 18),
+                    Position = UDim2.new(0, 0, 0, 15),
+                    BackgroundColor3 = Library.Theme.SectionBackground,
+                    BorderSizePixel = 0, ZIndex = 7, Parent = Holder,
+                })
+                ApplyCelestiteStyle(Box)
+
+                local ValueLabel = Create("TextLabel", {
+                    Text = FormatDisplay(),
+                    Size = UDim2.new(1, -20, 1, 0),
+                    Position = UDim2.new(0, 6, 0, 0),
+                    BackgroundTransparency = 1, Font = UI_FONT,
+                    TextSize = Library.Config.FontSize,
+                    TextColor3 = Library.Theme.Text,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Center,
+                    ZIndex = 8, Parent = Box,
+                    TextStrokeTransparency = 0,
+                    TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                })
+                table.insert(Library.Elements.Labels, ValueLabel)
+
+                local Arrow = Create("TextLabel", {
+                    Text = "v", Size = UDim2.new(0, 20, 1, 0),
+                    Position = UDim2.new(1, -20, 0, -1),
+                    BackgroundTransparency = 1, Font = UI_FONT,
+                    TextSize = Library.Config.FontSize,
+                    TextColor3 = Library.Theme.Text,
+                    TextXAlignment = Enum.TextXAlignment.Center,
+                    TextYAlignment = Enum.TextYAlignment.Center,
+                    ZIndex = 8, Parent = Box,
+                    TextStrokeTransparency = 0,
+                    TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                })
+                table.insert(Library.Elements.Labels, Arrow)
+
+                local Button = Create("TextButton", {
+                    Size = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1, Text = "",
+                    ZIndex = 9, Parent = Box,
+                })
+
+                local LIST_ITEM_H = 18
+                local MAX_VISIBLE = 8
+
+                local DropOuter = Create("Frame", {
+                    Name = "MultiDropContainer", BackgroundTransparency = 1,
+                    Visible = false, ClipsDescendants = true,
+                    ZIndex = 5000, Parent = ScreenGui,
+                })
+                local DropInner = Create("Frame", {
+                    Name = "DropInner",
+                    BackgroundColor3 = Library.Theme.DarkBackground,
+                    BorderSizePixel = 0,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Position = UDim2.new(0, 0, 0, 0),
+                    ZIndex = 5001, Parent = DropOuter,
+                })
+                ApplyCelestiteStyle(DropInner)
+
+                table.insert(Library.Elements.MultiDropdowns, {
+                    Box = Box, Label = Label, ValueLabel = ValueLabel,
+                    Arrow = Arrow, Container = DropInner,
+                })
+
+                local OptionHolder = Create("ScrollingFrame", {
+                    Name = "Options", Size = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1, BorderSizePixel = 0,
+                    ZIndex = 5002, Parent = DropInner,
+                    ScrollBarThickness = 2,
+                    CanvasSize = UDim2.new(0, 0, 0, 0),
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                })
+                Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
+
+                local currentListHeight = 0
+                local dropOpen = false
+                local openTween, closeTween
+
+                local function finishClose()
+                    if dropOpen then return end
+                    DropOuter.Visible = false
+                    Arrow.Text = "v"
+                    Arrow.Position = UDim2.new(1, -20, 0, -1)
+                end
+
+                Library:RegisterPopup(function()
+                    if openTween then openTween:Cancel() end
+                    if closeTween then closeTween:Cancel() end
+                    DropInner.Position = UDim2.new(0, 0, 0, 0)
+                    dropOpen = false
+                    finishClose()
+                end)
+
+                local function FireCallback()
+                    ValueLabel.Text = FormatDisplay()
+                    if mopts.Callback then mopts.Callback(GetSelectedList()) end
+                end
+
+                local function UpdateList(new)
+                    if new then options = new; mopts.Options = new end
+                    OptionHolder:ClearAllChildren()
+                    Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
+
+                    if #options == 0 then
+                        Create("TextLabel", {
+                            Text = "No options",
+                            Size = UDim2.new(1, 0, 0, LIST_ITEM_H),
+                            BackgroundTransparency = 1, Font = UI_FONT,
+                            TextSize = Library.Config.FontSize,
+                            TextColor3 = Library.Theme.InactiveText,
+                            ZIndex = 5005, Parent = OptionHolder,
+                            TextXAlignment = Enum.TextXAlignment.Center,
+                        })
+                    else
+                        for _, option in ipairs(options) do
+                            local row = Create("TextButton", {
+                                Text = "", Size = UDim2.new(1, 0, 0, LIST_ITEM_H),
+                                BackgroundTransparency = 1, AutoButtonColor = false,
+                                ZIndex = 5005, Parent = OptionHolder,
+                            })
+
+                            local CheckOuter = Create("Frame", {
+                                Name = "Check",
+                                Size = UDim2.new(0, 10, 0, 10),
+                                Position = UDim2.new(0, 6, 0.5, -5),
+                                BackgroundColor3 = selectedSet[option]
+                                    and Library.Theme.Accent
+                                    or  Library.Theme.SectionBackground,
+                                BorderSizePixel = 0, ZIndex = 5006, Parent = row,
+                            })
+                            ApplyCelestiteStyle(CheckOuter)
+
+                            local OptLabel = Create("TextLabel", {
+                                Text = tostring(option),
+                                Size = UDim2.new(1, -24, 1, 0),
+                                Position = UDim2.new(0, 22, 0, 0),
+                                BackgroundTransparency = 1, Font = UI_FONT,
+                                TextSize = Library.Config.FontSize,
+                                TextColor3 = Library.Theme.Text,
+                                TextXAlignment = Enum.TextXAlignment.Left,
+                                TextYAlignment = Enum.TextYAlignment.Center,
+                                ZIndex = 5006, Parent = row,
+                                TextStrokeTransparency = 0,
+                                TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                            })
+
+                            row.MouseButton1Click:Connect(function()
+                                selectedSet[option] = not selectedSet[option]
+                                Tween(CheckOuter, {
+                                    BackgroundColor3 = selectedSet[option]
+                                        and Library.Theme.Accent
+                                        or  Library.Theme.SectionBackground,
+                                }, 0.12)
+                                FireCallback()
+                            end)
+                        end
+                    end
+
+                    local h = math.clamp(#options * LIST_ITEM_H, LIST_ITEM_H, MAX_VISIBLE * LIST_ITEM_H)
+                    if #options == 0 then h = LIST_ITEM_H end
+                    currentListHeight = h
+                    DropOuter.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, h)
+                end
+
+                local function openDropdown()
+                    if mopts.OnOpen then mopts.OnOpen() end
+                    task.defer(function()
+                        UpdateList()
+                        local absPos = Box.AbsolutePosition
+                        local absSz  = Box.AbsoluteSize
+                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
+                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
+
+                        DropInner.Position = UDim2.new(0, 0, 0, -currentListHeight)
+                        DropOuter.Visible = true
+                        dropOpen = true
+
+                        if openTween then openTween:Cancel() end
+                        if closeTween then closeTween:Cancel() end
+
+                        openTween = TweenService:Create(
+                            DropInner,
+                            TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                            { Position = UDim2.new(0, 0, 0, 0) }
+                        )
+                        openTween:Play()
+
+                        Arrow.Text = "^"
+                        Arrow.Position = UDim2.new(1, -20, 0, 2)
+                    end)
+                end
+
+                local function closeDropdown()
+                    if not dropOpen then return end
+                    if openTween then openTween:Cancel() end
+                    if closeTween then closeTween:Cancel() end
+                    dropOpen = false
+
+                    closeTween = TweenService:Create(
+                        DropInner,
+                        TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                        { Position = UDim2.new(0, 0, 0, -currentListHeight) }
+                    )
+                    closeTween.Completed:Connect(finishClose)
+                    closeTween:Play()
+
+                    Arrow.Text = "v"
+                    Arrow.Position = UDim2.new(1, -20, 0, -1)
+                end
+
+                Button.MouseButton1Click:Connect(function()
+                    if dropOpen then closeDropdown() else openDropdown() end
+                end)
+
+                UIS.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 and dropOpen then
+                        if not IsWithin(DropOuter, input) and not IsWithin(Box, input) then
+                            closeDropdown()
+                        end
+                    end
+                end)
+
+                Box:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+                    if dropOpen then
+                        local absPos = Box.AbsolutePosition
+                        local absSz  = Box.AbsoluteSize
+                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
+                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
+                    end
+                end)
+
+                local Obj = {
+                    Get = function() return GetSelectedList() end,
+                    Set = function(list)
+                        selectedSet = {}
+                        for _, v in ipairs(list) do selectedSet[v] = true end
+                        ValueLabel.Text = FormatDisplay()
+                        if dropOpen then UpdateList() end
+                    end,
+                    Refresh = function(new) UpdateList(new) end,
+                    IsSelected = function(opt) return selectedSet[opt] == true end,
+                    Toggle = function(opt)
+                        selectedSet[opt] = not selectedSet[opt]
+                        FireCallback()
+                        if dropOpen then UpdateList() end
+                    end,
+                }
+                Library.Flags[mopts.Flag or mopts.Name] = Obj
                 return Obj
             end
 
@@ -1988,7 +2593,6 @@ function Library:Window(title, size)
     ApplyCelestiteStyle(Watermark)
     table.insert(Library.Elements.Watermarks, Watermark)
 
-    -- Accent line (mirrors the topbar's AccentLine)
     local WmAccent = Create("Frame", {
         Name = "AccentLine",
         Size = UDim2.new(1, -2, 0, 1),
