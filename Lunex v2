@@ -6,6 +6,7 @@
     • Right-side auto-width notifications
     • Left-aligned scrollable tab columns, editable sliders
     • Ripple on buttons, locked full-fill tabs, TP/Spectate
+    • V2.18: 3-layer keybind box (Outline / DarkBackground / Inline stroke)
 ]]
 
 local Players      = game:GetService("Players")
@@ -175,6 +176,7 @@ Library.Elements = {
     BottomBarWelcomes = {}, BottomBarGames = {},
     TabScrolls = {},
     ToggleBtns = {}, ToggleBtnStripes = {}, ToggleBtnLabels = {},
+    KeybindBoxes = {},
 }
 Library.Flags = {}
 Library.OpenPopups = {}
@@ -249,6 +251,19 @@ function Library:UpdateTheme()
     end
     for _, lbl in pairs(Library.Elements.ToggleBtnLabels) do
         if lbl.Parent then lbl.TextColor3 = Library.Theme.Text end
+    end
+
+    -- ─── Keybind boxes ───
+    for _, kb in pairs(Library.Elements.KeybindBoxes) do
+        if kb.Outer and kb.Outer.Parent then
+            kb.Outer.BackgroundColor3 = Library.Theme.Outline
+        end
+        if kb.Inner and kb.Inner.Parent then
+            kb.Inner.BackgroundColor3 = Library.Theme.DarkBackground
+        end
+        if kb.Stroke and kb.Stroke.Parent then
+            kb.Stroke.Color = Library.Theme.Inline
+        end
     end
 
     local accentHex = ColorToHex(Library.Theme.Accent)
@@ -982,10 +997,76 @@ function Library:Window(title, size)
 
                 function ToggleObj:Keybind(kopts)
                     local bind = { Key = kopts.Default or Enum.KeyCode.X, Binding = false, Started = 0, Label = nil, OnTrigger = ToggleState, Callback = kopts.Callback }
-                    local KLabel = Create("TextLabel", { Text = GetKeyName(bind.Key), Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 12, Parent = RightSide, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+
+                    -- ─── Keybind box ───
+                    -- 3-layer stack:
+                    --   PickOuter        → 1px dark outline      (Theme.Outline)
+                    --   PickInner        → darker interior       (Theme.DarkBackground)
+                    --   PickInlineStroke → 1px inner border      (Theme.Inline)
+                    local PickOuter = Create("Frame", {
+                        Name = "KeybindBox",
+                        BackgroundColor3 = Library.Theme.Outline,
+                        BorderSizePixel = 0,
+                        Size = UDim2.new(0, 32, 0, 15),
+                        ZIndex = 12,
+                        Parent = RightSide,
+                    })
+
+                    local PickInner = Create("Frame", {
+                        Name = "Inner",
+                        BackgroundColor3 = Library.Theme.DarkBackground,
+                        BorderSizePixel = 0,
+                        Position = UDim2.new(0, 1, 0, 1),
+                        Size = UDim2.new(1, -2, 1, -2),
+                        ZIndex = 13,
+                        Parent = PickOuter,
+                    })
+
+                    local PickStrokeHolder = Create("Frame", {
+                        Name = "StrokeHolder",
+                        BackgroundTransparency = 1,
+                        Size = UDim2.new(1, 0, 1, 0),
+                        ZIndex = 14,
+                        Parent = PickInner,
+                    })
+
+                    local PickInlineStroke = Create("UIStroke", {
+                        Color = Library.Theme.Inline,
+                        Thickness = 1,
+                        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                        Parent = PickStrokeHolder,
+                    })
+
+                    table.insert(Library.Elements.KeybindBoxes, {
+                        Outer  = PickOuter,
+                        Inner  = PickInner,
+                        Stroke = PickInlineStroke,
+                    })
+
+                    local KLabel = Create("TextLabel", {
+                        Text = GetKeyName(bind.Key),
+                        Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1,
+                        Font = UI_FONT,
+                        TextSize = Library.Config.FontSize,
+                        TextColor3 = Library.Theme.Text,
+                        TextXAlignment = Enum.TextXAlignment.Center,
+                        TextYAlignment = Enum.TextYAlignment.Center,
+                        ZIndex = 15,
+                        Parent = PickInner,
+                        TextStrokeTransparency = 0,
+                        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                    })
                     bind.Label = KLabel
                     table.insert(Library.Elements.Labels, KLabel)
-                    local BindBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = KLabel })
+
+                    local BindBtn = Create("TextButton", {
+                        Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1,
+                        Text = "",
+                        ZIndex = 16,
+                        Parent = PickOuter,
+                    })
                     BindBtn.MouseButton1Click:Connect(function()
                         if bind.Binding then return end
                         bind.Binding = true; bind.Started = tick()
