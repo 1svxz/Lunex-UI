@@ -1,8 +1,7 @@
 --[[
-    Celestite UI Library - V2.14 (Full)
-    • Default toggle button label is now "UI Toggle"
-    • Smaller Elisium-style toggle button (110×36)
-    • Right-side notifications with auto-width and proper layering
+    Celestite UI Library - V2.15 (Full)
+    • Auto-sizing toggle button — grows/shrinks to fit its label
+    • Right-side auto-width notifications
     • Left-aligned scrollable tab columns, editable sliders, animated dropdowns
     • Ripple on buttons, Proggy font, locked full-fill tabs, TP/Spectate
 ]]
@@ -1825,12 +1824,27 @@ function Library:Window(title, size)
     task.delay(0.2, function() Library:UpdateTheme() end)
 
     --=============================================================
-    -- TOGGLE BUTTON (default label: "UI Toggle")
+    -- AUTO-SIZING TOGGLE BUTTON
+    --   Measures the label and grows/shrinks to fit. Default: "UI Toggle"
     --=============================================================
+    local TOGGLE_LABEL_SIZE = 14
+    local TOGGLE_LABEL_PAD  = 20    -- total horizontal padding (10 left + 10 right)
+    local TOGGLE_HEIGHT     = 30
+
+    local function MeasureToggleWidth(text)
+        local b = TextService:GetTextSize(
+            tostring(text),
+            TOGGLE_LABEL_SIZE,
+            Enum.Font.Code,
+            Vector2.new(500, 100)
+        )
+        return math.max(56, math.ceil(b.X) + TOGGLE_LABEL_PAD)
+    end
+
     local ToggleBtn = Create("TextButton", {
         Name = "ToggleUIButton",
         Text = "",
-        Size = UDim2.new(0, 110, 0, 36),
+        Size = UDim2.new(0, MeasureToggleWidth("UI Toggle"), 0, TOGGLE_HEIGHT),
         Position = UDim2.new(0, 20, 0, 20),
         BackgroundColor3 = Library.Theme.Background,
         AutoButtonColor = false,
@@ -1854,12 +1868,12 @@ function Library:Window(title, size)
 
     local ToggleLabel = Create("TextLabel", {
         Name = "Label",
-        Text = "UI Toggle",   -- ← default label
-        Size = UDim2.new(1, 0, 1, -8),
-        Position = UDim2.new(0, 0, 0, 6),
+        Text = "UI Toggle",
+        Size = UDim2.new(1, 0, 1, -6),
+        Position = UDim2.new(0, 0, 0, 4),
         BackgroundTransparency = 1,
         FontFace = true,
-        TextSize = 16,
+        TextSize = TOGGLE_LABEL_SIZE,
         TextColor3 = Library.Theme.Text,
         TextXAlignment = Enum.TextXAlignment.Center,
         TextYAlignment = Enum.TextYAlignment.Center,
@@ -1879,9 +1893,16 @@ function Library:Window(title, size)
         if not uiVisible then Library:CloseAllPopups() end
     end)
 
+    -- Public API: rename AND resize the pill
     function Window:SetToggleButtonText(str)
+        str = tostring(str)
         if ToggleLabel and ToggleLabel.Parent then
-            ToggleLabel.Text = tostring(str)
+            ToggleLabel.Text = str
+        end
+        if ToggleBtn and ToggleBtn.Parent then
+            Tween(ToggleBtn, {
+                Size = UDim2.new(0, MeasureToggleWidth(str), 0, TOGGLE_HEIGHT)
+            }, 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         end
     end
 
