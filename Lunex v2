@@ -1,8 +1,9 @@
 --[[
-    Celestite UI Library - V2.15.2 (Full)
-    • Font source: fonts.get_font_from_name("proggy-square") with URL fallback
+    Celestite UI Library - V2.16 (Full)
+    • Font: RegisterFont("Verdana", ...) with fs-tahoma-8px.ttf URL
     • Dropdown race-condition fix
-    • Auto-sizing toggle button, right-side auto-width notifications
+    • Auto-sizing toggle button (default "UI Toggle")
+    • Right-side auto-width notifications
     • Left-aligned scrollable tab columns, editable sliders
     • Ripple on buttons, locked full-fill tabs, TP/Spectate
 ]]
@@ -14,7 +15,7 @@ local CoreGui      = game:GetService("CoreGui")
 local HttpService  = game:GetService("HttpService")
 local TextService  = game:GetService("TextService")
 
-local Library = { Config = { Font = "Proggy", FontSize = 12 } }
+local Library = { Config = { FontSize = 12 } }
 
 -------------------------------------------------
 -- UTILITIES
@@ -105,67 +106,37 @@ end
 
 -------------------------------------------------
 -- FONT
---   Primary: fonts.get_font_from_name("proggy-square")
---   Fallback: download Proggy .ttf + .json from GitHub
+--   Primary: RegisterFont("Verdana", 400, "Normal", { Id = "...", Font = HttpGet(url) })
+--   Fallback: enum font
 -------------------------------------------------
-local LoadedFonts = {}
-
-local function LoadFontFromSystem()
-    -- Returns a Font object if fonts.get_font_from_name exists, otherwise nil
-    local ok, result = pcall(function()
-        if type(fonts) ~= "table" or type(fonts.get_font_from_name) ~= "function" then
-            return nil
-        end
-        return fonts.get_font_from_name("proggy-square")
-    end)
-    if ok and result then
-        return result
-    end
-    return nil
-end
-
-local function LoadFontFromURL()
-    local name = "Proggy"
-    local url  = "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Proggy.txt"
-    local ok, err = pcall(function()
-        local ttf_path  = name .. ".ttf"
-        local json_path = name .. ".json"
-        if not isfile(ttf_path) then
-            writefile(ttf_path, b64decode(game:HttpGet(url)))
-        end
-        if not isfile(json_path) then
-            local data = {
-                name  = name,
-                faces = {
-                    { name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(ttf_path) }
-                }
-            }
-            writefile(json_path, HttpService:JSONEncode(data))
-        end
-        LoadedFonts[name] = Font.new(getcustomasset(json_path), Enum.FontWeight.Regular)
-    end)
-    if not ok then
-        warn("[Celestite] Fallback Proggy download failed: " .. tostring(err))
-    end
-end
+local LoadedFont = nil
 
 local function LoadFonts()
-    -- Try the environment-provided proggy-square first
-    local systemFont = LoadFontFromSystem()
-    if systemFont then
-        LoadedFonts["Proggy"] = systemFont
-        LoadedFonts["proggy-square"] = systemFont
-        return
+    local ok, err = pcall(function()
+        -- RegisterFont is the executor-provided function used by many script hubs.
+        if type(RegisterFont) ~= "function" then
+            error("RegisterFont not available in this environment")
+        end
+
+        local Verdana = RegisterFont("Verdana", 400, "Normal", {
+            Id   = "Verdana.ttf",
+            Font = game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/fs-tahoma-8px.ttf"),
+        })
+
+        if not Verdana then
+            error("RegisterFont returned nil")
+        end
+
+        LoadedFont = Font.new(Verdana, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    end)
+    if not ok then
+        warn("[Celestite] RegisterFont failed, using fallback: " .. tostring(err))
     end
-    -- Fall back to downloading Proggy
-    LoadFontFromURL()
 end
 LoadFonts()
 
 local function GetFont()
-    return LoadedFonts["Proggy"]
-        or LoadedFonts["proggy-square"]
-        or Font.fromEnum(Enum.Font.Code)
+    return LoadedFont or Font.fromEnum(Enum.Font.Code)
 end
 
 -------------------------------------------------
