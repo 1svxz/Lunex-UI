@@ -1,9 +1,10 @@
 --[[
-    Celestite UI Library - V2.15.1 (Full)
-    • FIX: Dropdown can be re-opened without waiting for the close animation
+    Celestite UI Library - V2.15.2 (Full)
+    • Font source: fonts.get_font_from_name("proggy-square") with URL fallback
+    • Dropdown race-condition fix
     • Auto-sizing toggle button, right-side auto-width notifications
     • Left-aligned scrollable tab columns, editable sliders
-    • Ripple on buttons, Proggy font, locked full-fill tabs, TP/Spectate
+    • Ripple on buttons, locked full-fill tabs, TP/Spectate
 ]]
 
 local Players      = game:GetService("Players")
@@ -103,10 +104,27 @@ local function MakeDraggable(frame, handle)
 end
 
 -------------------------------------------------
--- FONT (Proggy only)
+-- FONT
+--   Primary: fonts.get_font_from_name("proggy-square")
+--   Fallback: download Proggy .ttf + .json from GitHub
 -------------------------------------------------
 local LoadedFonts = {}
-local function LoadFonts()
+
+local function LoadFontFromSystem()
+    -- Returns a Font object if fonts.get_font_from_name exists, otherwise nil
+    local ok, result = pcall(function()
+        if type(fonts) ~= "table" or type(fonts.get_font_from_name) ~= "function" then
+            return nil
+        end
+        return fonts.get_font_from_name("proggy-square")
+    end)
+    if ok and result then
+        return result
+    end
+    return nil
+end
+
+local function LoadFontFromURL()
     local name = "Proggy"
     local url  = "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Proggy.txt"
     local ok, err = pcall(function()
@@ -126,12 +144,28 @@ local function LoadFonts()
         end
         LoadedFonts[name] = Font.new(getcustomasset(json_path), Enum.FontWeight.Regular)
     end)
-    if not ok then warn("[Celestite] Failed to load Proggy: " .. tostring(err)) end
+    if not ok then
+        warn("[Celestite] Fallback Proggy download failed: " .. tostring(err))
+    end
+end
+
+local function LoadFonts()
+    -- Try the environment-provided proggy-square first
+    local systemFont = LoadFontFromSystem()
+    if systemFont then
+        LoadedFonts["Proggy"] = systemFont
+        LoadedFonts["proggy-square"] = systemFont
+        return
+    end
+    -- Fall back to downloading Proggy
+    LoadFontFromURL()
 end
 LoadFonts()
 
 local function GetFont()
-    return LoadedFonts["Proggy"] or Font.fromEnum(Enum.Font.Code)
+    return LoadedFonts["Proggy"]
+        or LoadedFonts["proggy-square"]
+        or Font.fromEnum(Enum.Font.Code)
 end
 
 -------------------------------------------------
@@ -405,7 +439,7 @@ end
 Library.SpawnRipple = SpawnRipple
 
 -------------------------------------------------
--- NOTIFICATIONS  (right side, auto-width, proper layering)
+-- NOTIFICATIONS
 -------------------------------------------------
 local NotifHolder = Instance.new("Frame")
 NotifHolder.Name = "NotifHolder"
@@ -1235,9 +1269,6 @@ function Library:Window(title, size)
                 return Obj
             end
 
-            --=============================================================
-            -- DROPDOWN (with race-condition fix)
-            --=============================================================
             function Section:Dropdown(dopts)
                 local dropped = false
                 local selected = dopts.Default or (dopts.Options and dopts.Options[1]) or "None"
@@ -1290,9 +1321,6 @@ function Library:Window(title, size)
                 local dropOpen = false
                 local openTween, closeTween
 
-                -- FIX: bail out of finishClose if we've already been reopened.
-                -- Without this, cancelling the close tween (which fires Completed)
-                -- would hide the dropdown that the deferred open had just shown.
                 local function finishClose()
                     if dropOpen then return end
                     DropOuter.Visible = false
@@ -1304,7 +1332,7 @@ function Library:Window(title, size)
                     if openTween then openTween:Cancel() end
                     if closeTween then closeTween:Cancel() end
                     DropInner.Position = UDim2.new(0, 0, 0, 0)
-                    dropOpen = false   -- force-close before calling finishClose
+                    dropOpen = false
                     finishClose()
                 end)
 
@@ -1383,7 +1411,7 @@ function Library:Window(title, size)
 
                         DropInner.Position = UDim2.new(0, 0, 0, -currentListHeight)
                         DropOuter.Visible = true
-                        dropOpen = true   -- set BEFORE cancelling the close tween
+                        dropOpen = true
 
                         if openTween then openTween:Cancel() end
                         if closeTween then closeTween:Cancel() end
