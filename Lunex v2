@@ -1,7 +1,8 @@
 --[[
-    Celestite UI Library - V2.13 (Full)
-    • Smaller Elisium toggle button (110×36)
-    • Notifications on the RIGHT side, auto-width, proper layering
+    Celestite UI Library - V2.14 (Full)
+    • Default toggle button label is now "UI Toggle"
+    • Smaller Elisium-style toggle button (110×36)
+    • Right-side notifications with auto-width and proper layering
     • Left-aligned scrollable tab columns, editable sliders, animated dropdowns
     • Ripple on buttons, Proggy font, locked full-fill tabs, TP/Spectate
 ]]
@@ -410,7 +411,7 @@ Library.SpawnRipple = SpawnRipple
 local NotifHolder = Instance.new("Frame")
 NotifHolder.Name = "NotifHolder"
 NotifHolder.Size = UDim2.new(0, 340, 1, -40)
-NotifHolder.Position = UDim2.new(1, -350, 0, 20)   -- anchored to the right
+NotifHolder.Position = UDim2.new(1, -350, 0, 20)
 NotifHolder.BackgroundTransparency = 1
 NotifHolder.ClipsDescendants = false
 NotifHolder.ZIndex = 1000
@@ -428,7 +429,6 @@ function Library:Notification(opts)
     local text     = opts.Text or "Notification"
     local duration = opts.Duration or 5
 
-    -- Auto-compute width from the actual text
     local bounds = TextService:GetTextSize(
         text,
         Library.Config.FontSize,
@@ -441,7 +441,6 @@ function Library:Notification(opts)
     local width  = math.clamp(math.ceil(bounds.X) + padLeft + padRight + accentW + 8, 80, 320)
     local height = 26
 
-    -- Row: keeps UIListLayout stacking working; the inner holder animates freely
     local Row = Instance.new("Frame")
     Row.Name = "NotifRow"
     Row.Size = UDim2.new(1, 0, 0, height)
@@ -449,11 +448,10 @@ function Library:Notification(opts)
     Row.ZIndex = 1000
     Row.Parent = NotifHolder
 
-    -- Actual notification (slides in from offscreen right)
     local Holder = Instance.new("Frame")
     Holder.Name = "Notif"
     Holder.AnchorPoint = Vector2.new(1, 0)
-    Holder.Position = UDim2.new(1, width + 24, 0, 0)  -- fully offscreen
+    Holder.Position = UDim2.new(1, width + 24, 0, 0)
     Holder.Size = UDim2.fromOffset(width, height)
     Holder.BackgroundColor3 = Library.Theme.DarkBackground
     Holder.BorderSizePixel = 0
@@ -486,14 +484,12 @@ function Library:Notification(opts)
     TLabel.ZIndex = 1003
     TLabel.Parent = Holder
 
-    -- Slide in from the right
     TweenService:Create(
         Holder,
         TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
         { Position = UDim2.new(1, 0, 0, 0) }
     ):Play()
 
-    -- Slide out to the right and destroy
     task.delay(duration, function()
         if not Row or not Row.Parent then return end
         local outTween = TweenService:Create(
@@ -1829,7 +1825,7 @@ function Library:Window(title, size)
     task.delay(0.2, function() Library:UpdateTheme() end)
 
     --=============================================================
-    -- ELISIUM STYLE TOGGLE BUTTON (compact: 110×36)
+    -- TOGGLE BUTTON (default label: "UI Toggle")
     --=============================================================
     local ToggleBtn = Create("TextButton", {
         Name = "ToggleUIButton",
@@ -1858,7 +1854,7 @@ function Library:Window(title, size)
 
     local ToggleLabel = Create("TextLabel", {
         Name = "Label",
-        Text = "Elisium",
+        Text = "UI Toggle",   -- ← default label
         Size = UDim2.new(1, 0, 1, -8),
         Position = UDim2.new(0, 0, 0, 6),
         BackgroundTransparency = 1,
