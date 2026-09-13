@@ -1,6 +1,7 @@
 --[[
-    Celestite UI Library - V2.11.6 (Full)
-    • NEW: Tab columns are scrollable — content never overflows the window
+    Celestite UI Library - V2.11.7 (Full)
+    • FIX: Left/Right tab columns now align their sections flush left
+    • Scrollable tab columns (content never overflows the window)
     • Centered title + bottom bar with "Welcome PLAYERNAME" / game name
     • Editable slider value field, animated dropdowns, ripple on buttons
     • Proggy font, locked full-fill tabs, TP/Spectate, popup cleanup
@@ -210,7 +211,7 @@ Library.Elements = {
     PlayerListDetails = {}, PlayerListThumbs = {}, PlayerListInfoLabels = {},
     PlayerListActionBtns = {},
     BottomBarWelcomes = {}, BottomBarGames = {},
-    TabScrolls = {},   -- NEW: tab column scrollbars
+    TabScrolls = {},
 }
 Library.Flags = {}
 Library.OpenPopups = {}
@@ -271,14 +272,12 @@ function Library:UpdateTheme()
     for _, out in pairs(Library.Elements.Outlines) do out.Color = Library.Theme.Outline end
     for _, inl in pairs(Library.Elements.Inlines)  do inl.Color = Library.Theme.Inline  end
 
-    -- NEW: recolor every tab column's scrollbar
     for _, scroll in pairs(Library.Elements.TabScrolls) do
         if scroll and scroll.Parent then
             scroll.ScrollBarImageColor3 = Library.Theme.Accent
         end
     end
 
-    -- Bottom bar text — accent-colored player name + game name
     local accentHex = ColorToHex(Library.Theme.Accent)
     local playerName = (Players.LocalPlayer and Players.LocalPlayer.Name) or "Player"
     for _, lbl in pairs(Library.Elements.BottomBarWelcomes) do
@@ -685,9 +684,7 @@ function Library:Window(title, size)
 
         --------------------------------------------------------------
         -- SCROLLABLE COLUMNS
-        -- ScrollingFrame so content never spills out of the window.
-        -- AutomaticCanvasSize = Y grows the canvas with the UIListLayout
-        -- inside, so the scrollbar only appears when content overflows.
+        -- Sections align to the LEFT of their column, never centered.
         --------------------------------------------------------------
         local function mkColumn(colName, size, pos)
             local col = Create("ScrollingFrame", {
@@ -708,11 +705,11 @@ function Library:Window(title, size)
                 ClipsDescendants = true,
             })
             table.insert(Library.Elements.TabScrolls, col)
-            -- Right padding so the scrollbar never overlaps the groupboxes
             Create("UIPadding", { PaddingRight = UDim.new(0, 6), Parent = col })
             Create("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
                 Padding = UDim.new(0, 4),
+                HorizontalAlignment = Enum.HorizontalAlignment.Left,   -- FIX: sections flush left
                 Parent = col,
             })
             return col
