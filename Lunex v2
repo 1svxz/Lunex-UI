@@ -1,11 +1,10 @@
 --[[
-    Celestite UI Library - V2.16 (Full)
-    • Font: RegisterFont("Verdana", ...) with fs-tahoma-8px.ttf URL
-    • Dropdown race-condition fix
-    • Auto-sizing toggle button (default "UI Toggle")
-    • Right-side auto-width notifications
-    • Left-aligned scrollable tab columns, editable sliders
-    • Ripple on buttons, locked full-fill tabs, TP/Spectate
+    Celestite UI Library - V2.16.3 (Full)
+    • FIX: Font cache busting — new filename forces a fresh download
+    • Font: 04B03
+    • Dropdown race-condition fix, auto-sizing toggle pill,
+      right-side auto-width notifications, scrollable columns,
+      editable sliders, ripple buttons
 ]]
 
 local Players      = game:GetService("Players")
@@ -106,34 +105,102 @@ end
 
 -------------------------------------------------
 -- FONT
---   Primary: RegisterFont("Verdana", 400, "Normal", { Id = "...", Font = HttpGet(url) })
---   Fallback: enum font
+--   1. RegisterFont("Verdana", 400, "Normal", {...})      (preferred)
+--   2. writefile + getcustomasset + Font.new               (fallback)
+--   3. Enum.Font.Code                                       (last resort)
+--
+--   Using 04B03 pixel font. Filename is versioned so old caches
+--   don't get reused when you change the URL.
 -------------------------------------------------
+local FONT_URL  = "https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/04B03.ttf"
+local FONT_ID   = "CelestiteFont_04B03.ttf"   -- ← new filename busts the old cache
+local FONT_NAME = "Verdana"
+
 local LoadedFont = nil
+local FontMethod = "Enum.Font.Code"
+
+local function TryRegisterFont()
+    if type(RegisterFont) ~= "function" then
+        return false, "RegisterFont is not available"
+    end
+
+    local ok, result = pcall(function()
+        local family = RegisterFont(FONT_NAME, 400, "Normal", {
+            Id   = FONT_ID,
+            Font = game:HttpGet(FONT_URL),
+        })
+        if not family then error("RegisterFont returned nil") end
+        return Font.new(family, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    end)
+
+    if ok and result then
+        LoadedFont = result
+        FontMethod = "RegisterFont"
+        return true, nil
+    end
+    return false, tostring(result)
+end
+
+local function TryCustomAsset()
+    if type(writefile) ~= "function" or type(getcustomasset) ~= "function" then
+        return false, "writefile / getcustomasset not available"
+    end
+
+    local ok, result = pcall(function()
+        if not isfile(FONT_ID) then
+            local bytes = game:HttpGet(FONT_URL)
+            if not bytes or #bytes < 100 then
+                error("Downloaded font is empty")
+            end
+            writefile(FONT_ID, bytes)
+        end
+        local asset = getcustomasset(FONT_ID)
+        return Font.new(asset, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    end)
+
+    if ok and result then
+        LoadedFont = result
+        FontMethod = "getcustomasset"
+        return true, nil
+    end
+    return false, tostring(result)
+end
 
 local function LoadFonts()
-    local ok, err = pcall(function()
-        -- RegisterFont is the executor-provided function used by many script hubs.
-        if type(RegisterFont) ~= "function" then
-            error("RegisterFont not available in this environment")
-        end
-
-        local Verdana = RegisterFont("Verdana", 400, "Normal", {
-            Id   = "Verdana.ttf",
-            Font = game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/fs-tahoma-8px.ttf"),
-        })
-
-        if not Verdana then
-            error("RegisterFont returned nil")
-        end
-
-        LoadedFont = Font.new(Verdana, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-    end)
-    if not ok then
-        warn("[Celestite] RegisterFont failed, using fallback: " .. tostring(err))
+    local ok, err = TryRegisterFont()
+    if ok then
+        print("[Celestite] Font loaded via RegisterFont (04B03)")
+        return
     end
+    warn("[Celestite] RegisterFont path failed: " .. tostring(err))
+
+    ok, err = TryCustomAsset()
+    if ok then
+        print("[Celestite] Font loaded via getcustomasset (04B03)")
+        return
+    end
+    warn("[Celestite] getcustomasset path failed: " .. tostring(err))
+
+    warn("[Celestite] Using Enum.Font.Code as final fallback")
+    FontMethod = "Enum.Font.Code"
 end
 LoadFonts()
+
+-- Helper: delete the cached font file so next execution re-downloads
+function Library:ClearFontCache()
+    if type(delfile) == "function" and type(isfile) == "function" then
+        if isfile(FONT_ID) then
+            pcall(delfile, FONT_ID)
+            print("[Celestite] Cleared font cache: " .. FONT_ID)
+            return true
+        end
+    end
+    return false
+end
+
+function Library:GetFontMethod()
+    return FontMethod
+end
 
 local function GetFont()
     return LoadedFont or Font.fromEnum(Enum.Font.Code)
@@ -1830,7 +1897,7 @@ function Library:Window(title, size)
     task.delay(0.2, function() Library:UpdateTheme() end)
 
     --=============================================================
-    -- AUTO-SIZING TOGGLE BUTTON (default label: "UI Toggle")
+    -- AUTO-SIZING TOGGLE BUTTON
     --=============================================================
     local TOGGLE_LABEL_SIZE = 14
     local TOGGLE_LABEL_PAD  = 20
