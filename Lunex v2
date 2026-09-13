@@ -1,10 +1,11 @@
 --[[
-    Celestite UI Library - V2.11.1 (Full)
-    • FIX: Tween() now auto-plays again — tab underline, notifications,
-      button flashes, toggle colours all animate correctly
-    • Ripple wave on button clicks (accent-coloured)
-    • Smooth easing on sliders + color pickers
-    • Proggy-only pixel font, locked full-fill tabs, TP/Spectate, popup cleanup
+    Celestite UI Library - V2.11.2 (Full)
+    • FIX: tab underline shows reliably
+        - Skip the current tab in the reset loop (no more tween race)
+        - Underline sits flush at the bottom of the tab, 2px tall
+        - AnchorPoint = (0.5, 1) → grows from the center outward
+    • Proggy font, locked full-fill tabs, TP/Spectate, popup cleanup,
+      smooth sliders/color pickers, accent-colored ripple wave on buttons
 ]]
 
 local Players      = game:GetService("Players")
@@ -13,18 +14,11 @@ local TweenService = game:GetService("TweenService")
 local CoreGui      = game:GetService("CoreGui")
 local HttpService  = game:GetService("HttpService")
 
--------------------------------------------------
--- CONFIGURATION
--------------------------------------------------
 local Library = { Config = { Font = "Proggy", FontSize = 12 } }
 
 -------------------------------------------------
 -- UTILITIES
 -------------------------------------------------
--- Auto-plays AND returns the tween so both styles work:
---     Tween(obj, props)              -- fires
---     Tween(obj, props):Play()       -- also fires (restarts, harmless)
---     Tween(obj, props).Completed... -- still works
 local function Tween(obj, props, time, style, dir)
     local t = TweenService:Create(
         obj,
@@ -63,7 +57,6 @@ local function MakeDraggable(frame, handle)
     handle = handle or frame
     local dragging = false
     local dragStart, startPos
-
     local inputBeganConn = handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
@@ -78,7 +71,6 @@ local function MakeDraggable(frame, handle)
             end)
         end
     end)
-
     local inputChangedConn = UIS.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
@@ -88,18 +80,13 @@ local function MakeDraggable(frame, handle)
             )
         end
     end)
-
     local inputEndedConn = UIS.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
-
     local focusConn = UIS.WindowFocused:Connect(function() end)
-    local focusLostConn = UIS.WindowFocusReleased:Connect(function()
-        dragging = false
-    end)
-
+    local focusLostConn = UIS.WindowFocusReleased:Connect(function() dragging = false end)
     return function()
         if inputBeganConn then inputBeganConn:Disconnect() end
         if inputChangedConn then inputChangedConn:Disconnect() end
@@ -110,21 +97,18 @@ local function MakeDraggable(frame, handle)
 end
 
 -------------------------------------------------
--- FONT SYSTEM (Proggy only)
+-- FONT (Proggy only)
 -------------------------------------------------
 local LoadedFonts = {}
-
 local function LoadFonts()
     local name = "Proggy"
     local url  = "https://raw.githubusercontent.com/OxygenClub/Random-LUAS/main/Proggy.txt"
-    local success, err = pcall(function()
+    local ok, err = pcall(function()
         local ttf_path  = name .. ".ttf"
         local json_path = name .. ".json"
-
         if not isfile(ttf_path) then
             writefile(ttf_path, b64decode(game:HttpGet(url)))
         end
-
         if not isfile(json_path) then
             local data = {
                 name  = name,
@@ -134,12 +118,9 @@ local function LoadFonts()
             }
             writefile(json_path, HttpService:JSONEncode(data))
         end
-
         LoadedFonts[name] = Font.new(getcustomasset(json_path), Enum.FontWeight.Regular)
     end)
-    if not success then
-        warn("[Celestite] Failed to load Proggy font: " .. tostring(err))
-    end
+    if not ok then warn("[Celestite] Failed to load Proggy: " .. tostring(err)) end
 end
 LoadFonts()
 
@@ -148,7 +129,7 @@ local function GetFont()
 end
 
 -------------------------------------------------
--- LIBRARY CORE
+-- CORE
 -------------------------------------------------
 Library.Registry = {}
 Library.Keys = {
@@ -186,7 +167,6 @@ UIS.InputBegan:Connect(function(input, gpe)
         if bind.Binding then
             if cur ~= Enum.KeyCode.Unknown then
                 if cur == Enum.UserInputType.MouseButton1 and tick() - bind.Started < 0.1 then
-                    -- skip the click that started the bind
                 else
                     bind.Binding = false
                     bind.Key = cur
@@ -247,7 +227,7 @@ function Library:UpdateTheme()
         sec.Header.TextColor3      = Library.Theme.Text
     end
     for _, hdr in pairs(Library.Elements.SectionHeaders) do hdr.BackgroundColor3 = Library.Theme.HeaderBar end
-    for _, acc in pairs(Library.Elements.SectionAccents) do acc.BackgroundColor3 = Library.Theme.Accent   end
+    for _, acc in pairs(Library.Elements.SectionAccents) do acc.BackgroundColor3 = Library.Theme.Accent end
     for _, tog in pairs(Library.Elements.Toggles) do
         tog.Box.BackgroundColor3 = tog.GetState() and Library.Theme.Accent or Library.Theme.SectionBackground
         tog.Label.TextColor3     = tog.GetState() and Library.Theme.Text or Library.Theme.InactiveText
@@ -286,11 +266,11 @@ function Library:UpdateTheme()
     for _, out in pairs(Library.Elements.Outlines) do out.Color = Library.Theme.Outline end
     for _, inl in pairs(Library.Elements.Inlines)  do inl.Color = Library.Theme.Inline  end
 
-    for _, ps  in pairs(Library.Elements.PlayerListScrolls)    do ps.ScrollBarImageColor3 = Library.Theme.Accent          end
-    for _, pd  in pairs(Library.Elements.PlayerListDetails)    do pd.BackgroundColor3     = Library.Theme.Background      end
+    for _, ps  in pairs(Library.Elements.PlayerListScrolls)    do ps.ScrollBarImageColor3 = Library.Theme.Accent end
+    for _, pd  in pairs(Library.Elements.PlayerListDetails)    do pd.BackgroundColor3     = Library.Theme.Background end
     for _, pt  in pairs(Library.Elements.PlayerListThumbs)     do pt.BackgroundColor3     = Library.Theme.SectionBackground end
-    for _, pdv in pairs(Library.Elements.PlayerListDividers)   do pdv.BackgroundColor3    = Library.Theme.Inline          end
-    for _, pil in pairs(Library.Elements.PlayerListInfoLabels) do pil.TextColor3          = Library.Theme.Text            end
+    for _, pdv in pairs(Library.Elements.PlayerListDividers)   do pdv.BackgroundColor3    = Library.Theme.Inline end
+    for _, pil in pairs(Library.Elements.PlayerListInfoLabels) do pil.TextColor3          = Library.Theme.Text end
     for _, pr in pairs(Library.Elements.PlayerListRows) do
         if pr.IsLocal then
             pr.Name.TextColor3   = Library.Theme.Text
@@ -348,16 +328,14 @@ local function ApplyCelestiteStyle(inst)
 end
 
 -------------------------------------------------
--- RIPPLE EFFECT
+-- RIPPLE
 -------------------------------------------------
 local function SpawnRipple(parent, input)
     if not parent or not parent.Parent then return end
-
     local absPos = parent.AbsolutePosition
     local absSz  = parent.AbsoluteSize
     local clickX = (input.Position.X - absPos.X)
     local clickY = (input.Position.Y - absPos.Y)
-
     local prevClip = parent.ClipsDescendants
     parent.ClipsDescendants = true
 
@@ -371,29 +349,27 @@ local function SpawnRipple(parent, input)
     Ripple.BorderSizePixel = 0
     Ripple.ZIndex = (parent.ZIndex or 1) + 5
     Ripple.Parent = parent
-
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(1, 0)
     corner.Parent = Ripple
 
     local maxDim = math.max(absSz.X, absSz.Y) * 2.6
-    local target = UDim2.fromOffset(maxDim, maxDim)
-
     local tw = TweenService:Create(
         Ripple,
         TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        { Size = target, BackgroundTransparency = 1 }
+        { Size = UDim2.fromOffset(maxDim, maxDim), BackgroundTransparency = 1 }
     )
     tw:Play()
-
     tw.Completed:Connect(function()
         if Ripple and Ripple.Parent then Ripple:Destroy() end
         if parent and parent.Parent then parent.ClipsDescendants = prevClip end
     end)
 end
-
 Library.SpawnRipple = SpawnRipple
 
+-------------------------------------------------
+-- NOTIFICATIONS
+-------------------------------------------------
 local NotifHolder = Instance.new("Frame")
 NotifHolder.Name = "NotifHolder"
 NotifHolder.Size = UDim2.new(0, 250, 1, -40)
@@ -443,7 +419,6 @@ function Library:Notification(opts)
     TLabel.ZIndex = 5
 
     Tween(Holder, {Position = UDim2.new(0, 0, 0, 0)}, 0.3)
-
     task.delay(duration, function()
         Tween(Holder, {Position = UDim2.new(-1.2, 0, 0, 0)}, 0.3)
         task.wait(0.3)
@@ -569,15 +544,9 @@ function Library:Window(title, size)
         }
         for _, spec in ipairs(edgeSpecs) do
             local handle = Create("TextButton", {
-                Name = "EdgeDrag",
-                Text = "",
-                BackgroundTransparency = 1,
-                AutoButtonColor = false,
-                Position = spec.pos,
-                Size = spec.size,
-                ZIndex = 20,
-                Parent = Main,
-                Active = true,
+                Name = "EdgeDrag", Text = "", BackgroundTransparency = 1,
+                AutoButtonColor = false, Position = spec.pos, Size = spec.size,
+                ZIndex = 20, Parent = Main, Active = true,
             })
             MakeDraggable(Main, handle)
         end
@@ -585,6 +554,8 @@ function Library:Window(title, size)
 
     function Window:Tab(name)
         local Tab = {}
+
+        -- Tab button
         local TabButton = Create("TextButton", {
             Name = name,
             Text = name,
@@ -598,18 +569,20 @@ function Library:Window(title, size)
             ZIndex = 3,
             Parent = TabBar,
             TextStrokeTransparency = 0,
-            TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+            ClipsDescendants = false,
         })
 
-        -- The underline that grows across the active tab
+        -- Bottom accent underline: 2px tall, anchored at the bottom-center of the tab
         local TabAccent = Create("Frame", {
             Name = "Accent",
-            Size = UDim2.new(0, 0, 0, 1),
-            Position = UDim2.new(0.5, 0, 0.5, 8),
+            AnchorPoint = Vector2.new(0.5, 1),
+            Position    = UDim2.new(0.5, 0, 1, 0),
+            Size        = UDim2.new(0, 0, 0, 2),
             BackgroundColor3 = Library.Theme.Accent,
             BorderSizePixel = 0,
-            ZIndex = 4,
-            Parent = TabButton
+            ZIndex = 5,
+            Parent = TabButton,
         })
 
         local TabPage = Create("Frame", {
@@ -622,59 +595,43 @@ function Library:Window(title, size)
         })
 
         local LeftColumn = Create("Frame", {
-            Name = "Left",
-            Size = UDim2.new(0.5, -8, 1, -12),
+            Name = "Left", Size = UDim2.new(0.5, -8, 1, -12),
             Position = UDim2.new(0, 6, 0, 6),
-            BackgroundTransparency = 1,
-            AutomaticSize = Enum.AutomaticSize.Y,
-            ZIndex = 3,
-            Parent = TabPage,
-            ClipsDescendants = false
+            BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y,
+            ZIndex = 3, Parent = TabPage, ClipsDescendants = false
         })
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = LeftColumn })
 
         local RightColumn = Create("Frame", {
-            Name = "Right",
-            Size = UDim2.new(0.5, -8, 1, -12),
+            Name = "Right", Size = UDim2.new(0.5, -8, 1, -12),
             Position = UDim2.new(0.5, 4, 0, 6),
-            BackgroundTransparency = 1,
-            AutomaticSize = Enum.AutomaticSize.Y,
-            ZIndex = 3,
-            Parent = TabPage,
-            ClipsDescendants = false
+            BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y,
+            ZIndex = 3, Parent = TabPage, ClipsDescendants = false
         })
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = RightColumn })
 
         local FullColumn = Create("Frame", {
-            Name = "Full",
-            Size = UDim2.new(1, -12, 1, -12),
+            Name = "Full", Size = UDim2.new(1, -12, 1, -12),
             Position = UDim2.new(0, 6, 0, 6),
             BackgroundTransparency = 1,
-            ZIndex = 3,
-            Parent = TabPage,
-            ClipsDescendants = false
+            ZIndex = 3, Parent = TabPage, ClipsDescendants = false
         })
         Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = FullColumn })
 
         Tab._locked = false
 
+        -- Activate: skip the current tab in the reset loop → no more tween race
         local function Activate()
             for _, t in pairs(Window.Tabs) do
-                t.Page.Visible = false
-                Tween(t.Button, { TextColor3 = Library.Theme.InactiveText })
-                -- collapse the underline back to a zero-width segment centred
-                Tween(t.Accent, {
-                    Size     = UDim2.new(0, 0, 0, 1),
-                    Position = UDim2.new(0.5, 0, 0.5, 8)
-                })
+                if t.Button ~= TabButton then
+                    t.Page.Visible = false
+                    Tween(t.Button, { TextColor3 = Library.Theme.InactiveText })
+                    Tween(t.Accent, { Size = UDim2.new(0, 0, 0, 2) })
+                end
             end
             TabPage.Visible = true
             Tween(TabButton, { TextColor3 = Library.Theme.Text })
-            -- grow the underline from left → full width
-            Tween(TabAccent, {
-                Size     = UDim2.new(1, 0, 0, 1),
-                Position = UDim2.new(0, 0, 0.5, 8)
-            })
+            Tween(TabAccent, { Size = UDim2.new(1, 0, 0, 2) })
         end
 
         TabButton.MouseButton1Click:Connect(Activate)
@@ -708,49 +665,33 @@ function Library:Window(title, size)
                 Size = fill and UDim2.new(1, 0, 1, 0) or UDim2.new(1, -4, 0, 0),
                 AutomaticSize = fill and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
                 BackgroundColor3 = Library.Theme.DarkBackground,
-                BorderSizePixel = 0,
-                ZIndex = 4,
-                Parent = parent,
-                ClipsDescendants = false
+                BorderSizePixel = 0, ZIndex = 4, Parent = parent, ClipsDescendants = false
             })
             ApplyCelestiteStyle(SectionFrame)
 
             local HeaderBar = Create("Frame", {
-                Name = "HeaderBar",
-                Size = UDim2.new(1, -2, 0, 20),
+                Name = "HeaderBar", Size = UDim2.new(1, -2, 0, 20),
                 Position = UDim2.new(0, 1, 0, 1),
                 BackgroundColor3 = Library.Theme.HeaderBar,
-                BorderSizePixel = 0,
-                ZIndex = 4,
-                Parent = SectionFrame
+                BorderSizePixel = 0, ZIndex = 4, Parent = SectionFrame
             })
             table.insert(Library.Elements.SectionHeaders, HeaderBar)
 
             local Header = Create("TextLabel", {
-                Name = "Header",
-                Text = sectionName,
-                Size = UDim2.new(1, 0, 0, 20),
-                Position = UDim2.new(0, 0, 0, 0),
-                BackgroundTransparency = 1,
-                FontFace = true,
-                TextSize = Library.Config.FontSize,
-                TextColor3 = Library.Theme.Text,
-                TextXAlignment = Enum.TextXAlignment.Center,
-                ZIndex = 5,
-                Parent = SectionFrame,
-                TextStrokeTransparency = 0,
-                TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                Name = "Header", Text = sectionName,
+                Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0, 0),
+                BackgroundTransparency = 1, FontFace = true,
+                TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text,
+                TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5, Parent = SectionFrame,
+                TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
             })
             table.insert(Library.Elements.Sections, { Frame = SectionFrame, Header = Header })
 
             local AccentUnderline = Create("Frame", {
-                Name = "AccentUnderline",
-                Size = UDim2.new(1, -2, 0, 1),
+                Name = "AccentUnderline", Size = UDim2.new(1, -2, 0, 1),
                 Position = UDim2.new(0, 1, 0, 21),
                 BackgroundColor3 = Library.Theme.Accent,
-                BorderSizePixel = 0,
-                ZIndex = 6,
-                Parent = SectionFrame
+                BorderSizePixel = 0, ZIndex = 6, Parent = SectionFrame
             })
             table.insert(Library.Elements.SectionAccents, AccentUnderline)
 
@@ -759,10 +700,7 @@ function Library:Window(title, size)
                 Size = fill and UDim2.new(1, -12, 1, -32) or UDim2.new(1, -12, 0, 0),
                 Position = UDim2.new(0, 6, 0, 24),
                 AutomaticSize = fill and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
-                BackgroundTransparency = 1,
-                ZIndex = 5,
-                Parent = SectionFrame,
-                ClipsDescendants = false
+                BackgroundTransparency = 1, ZIndex = 5, Parent = SectionFrame, ClipsDescendants = false
             })
             Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = ElementList })
             Create("UIPadding", { PaddingBottom = UDim.new(0, fill and 0 or 9), Parent = ElementList })
@@ -778,20 +716,17 @@ function Library:Window(title, size)
                 table.insert(Library.Elements.Buttons, Box)
 
                 local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 11, Parent = Box })
-
                 btn.MouseButton1Click:Connect(function()
                     Tween(Box, { BackgroundColor3 = Color3.fromRGB(45, 45, 45) }, 0.1)
                     task.wait(0.1)
                     Tween(Box, { BackgroundColor3 = Library.Theme.SectionBackground }, 0.1)
                     if bopts.Callback then bopts.Callback() end
                 end)
-
                 btn.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                         SpawnRipple(Box, input)
                     end
                 end)
-
                 return { SetText = function(t) Label.Text = t end }
             end
 
@@ -924,10 +859,7 @@ function Library:Window(title, size)
                     Tween(Label, { TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText })
                     if topts.Callback then topts.Callback(state) end
                 end
-                local function ToggleState()
-                    state = not state
-                    Set(state)
-                end
+                local function ToggleState() state = not state; Set(state) end
 
                 local ClickLayer = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", TextTransparency = 1, AutoButtonColor = false, ZIndex = 8, Parent = Holder })
                 ClickLayer.InputBegan:Connect(function(input)
@@ -948,10 +880,8 @@ function Library:Window(title, size)
                     local BindBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = KLabel })
                     BindBtn.MouseButton1Click:Connect(function()
                         if bind.Binding then return end
-                        bind.Binding = true
-                        bind.Started = tick()
-                        KLabel.Text = "?"
-                        KLabel.TextColor3 = Library.Theme.Accent
+                        bind.Binding = true; bind.Started = tick()
+                        KLabel.Text = "?"; KLabel.TextColor3 = Library.Theme.Accent
                     end)
                     UIS.InputBegan:Connect(function(input)
                         if bind.Binding and (tick() - bind.Started) > 0.01 then
@@ -1005,8 +935,7 @@ function Library:Window(title, size)
                     Library:RegisterPopup(ClosePicker)
                     CPBtn.MouseButton1Click:Connect(function()
                         if Picker.Visible then ClosePicker() else
-                            UpdatePos()
-                            Picker.Visible = true
+                            UpdatePos(); Picker.Visible = true
                             pickerConn = UIS.InputBegan:Connect(function(input)
                                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                                     if not IsWithin(Picker, input) and not IsWithin(CPHolder, input) then ClosePicker() end
@@ -1048,7 +977,6 @@ function Library:Window(title, size)
                     end)
                     return ToggleObj
                 end
-
                 return ToggleObj
             end
 
@@ -1070,7 +998,6 @@ function Library:Window(title, size)
                 local function tweenFill(pct)
                     Tween(SliderFill, { Size = UDim2.new(pct, 0, 1, 0) }, 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
                 end
-
                 local function update(input)
                     local pct = math.clamp((input.Position.X - SliderBack.AbsolutePosition.X) / SliderBack.AbsoluteSize.X, 0, 1)
                     val = math.floor(min + (max - min) * pct)
@@ -1086,8 +1013,7 @@ function Library:Window(title, size)
                 end
                 btn.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        sliding = true
-                        update(input)
+                        sliding = true; update(input)
                     end
                 end)
                 UIS.InputChanged:Connect(function(input)
@@ -1122,7 +1048,6 @@ function Library:Window(title, size)
 
                 local DropContainer = Create("Frame", { Name = "DropContainer", BackgroundColor3 = Library.Theme.DarkBackground, BorderSizePixel = 0, Visible = false, ZIndex = 5000, Parent = ScreenGui, ClipsDescendants = true })
                 ApplyCelestiteStyle(DropContainer)
-
                 local OptionHolder = Create("ScrollingFrame", { Name = "Options", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5001, Parent = DropContainer, ScrollBarThickness = 2, CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
 
@@ -1147,10 +1072,8 @@ function Library:Window(title, size)
                             optBtn.MouseButton1Click:Connect(function()
                                 selected = option
                                 ValueLabel.Text = tostring(option)
-                                dropped = false
-                                DropContainer.Visible = false
-                                Arrow.Text = "v"
-                                Arrow.Position = UDim2.new(1, -20, 0, -1)
+                                dropped = false; DropContainer.Visible = false
+                                Arrow.Text = "v"; Arrow.Position = UDim2.new(1, -20, 0, -1)
                                 if dopts.Callback then dopts.Callback(option) end
                                 UpdateList()
                             end)
@@ -1170,23 +1093,19 @@ function Library:Window(title, size)
                             DropContainer.Position = UDim2.new(0, Box.AbsolutePosition.X, 0, Box.AbsolutePosition.Y + 20)
                             DropContainer.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, DropContainer.Size.Y.Offset)
                             DropContainer.Visible = true
-                            Arrow.Text = "^"
-                            Arrow.Position = UDim2.new(1, -20, 0, 2)
+                            Arrow.Text = "^"; Arrow.Position = UDim2.new(1, -20, 0, 2)
                         end)
                     else
                         DropContainer.Visible = false
-                        Arrow.Text = "v"
-                        Arrow.Position = UDim2.new(1, -20, 0, -1)
+                        Arrow.Text = "v"; Arrow.Position = UDim2.new(1, -20, 0, -1)
                     end
                 end)
 
                 UIS.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 and dropped then
                         if not IsWithin(DropContainer, input) and not IsWithin(Box, input) then
-                            dropped = false
-                            DropContainer.Visible = false
-                            Arrow.Text = "v"
-                            Arrow.Position = UDim2.new(1, -20, 0, -1)
+                            dropped = false; DropContainer.Visible = false
+                            Arrow.Text = "v"; Arrow.Position = UDim2.new(1, -20, 0, -1)
                         end
                     end
                 end)
@@ -1218,76 +1137,55 @@ function Library:Window(title, size)
                 local Block = Create("Frame", {
                     Name = "PlayerListBlock",
                     Size = fill and UDim2.new(1, 0, 1, 0) or UDim2.new(1, 0, 0, blockHeight),
-                    BackgroundTransparency = 1,
-                    ZIndex = 6,
-                    Parent = ElementList,
+                    BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList,
                 })
-
                 local ListHolder = Create("ScrollingFrame", {
                     Name = "Players",
                     Size = UDim2.new(1, 0, 1, -(detailHeight + 6)),
                     Position = UDim2.new(0, 0, 0, 0),
-                    BackgroundTransparency = 1,
-                    BorderSizePixel = 0,
+                    BackgroundTransparency = 1, BorderSizePixel = 0,
                     CanvasSize = UDim2.new(0, 0, 0, 0),
                     AutomaticCanvasSize = Enum.AutomaticSize.Y,
-                    ScrollBarThickness = 2,
-                    ScrollBarImageColor3 = Library.Theme.Accent,
-                    ZIndex = 6,
-                    Parent = Block,
+                    ScrollBarThickness = 2, ScrollBarImageColor3 = Library.Theme.Accent,
+                    ZIndex = 6, Parent = Block,
                 })
                 table.insert(Library.Elements.PlayerListScrolls, ListHolder)
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 0), Parent = ListHolder })
 
                 local DetailPanel = Create("Frame", {
-                    Name = "DetailPanel",
-                    Size = UDim2.new(1, 0, 0, detailHeight),
+                    Name = "DetailPanel", Size = UDim2.new(1, 0, 0, detailHeight),
                     Position = UDim2.new(0, 0, 1, -detailHeight),
                     BackgroundColor3 = Library.Theme.Background,
-                    BorderSizePixel = 0,
-                    ZIndex = 7,
-                    Parent = Block,
+                    BorderSizePixel = 0, ZIndex = 7, Parent = Block,
                 })
                 ApplyCelestiteStyle(DetailPanel)
                 table.insert(Library.Elements.PlayerListDetails, DetailPanel)
 
                 local Thumb = Create("ImageLabel", {
-                    Name = "Thumb",
-                    Size = UDim2.new(0, 64, 0, 64),
+                    Name = "Thumb", Size = UDim2.new(0, 64, 0, 64),
                     Position = UDim2.new(0, 6, 0, 6),
                     BackgroundColor3 = Library.Theme.SectionBackground,
-                    BorderSizePixel = 0,
-                    Image = "",
-                    ScaleType = Enum.ScaleType.Crop,
-                    ZIndex = 9,
-                    Parent = DetailPanel,
+                    BorderSizePixel = 0, Image = "", ScaleType = Enum.ScaleType.Crop,
+                    ZIndex = 9, Parent = DetailPanel,
                 })
                 AddOutline(Thumb)
                 table.insert(Library.Elements.PlayerListThumbs, Thumb)
 
                 local InfoHolder = Create("Frame", {
-                    Name = "Info",
-                    BackgroundTransparency = 1,
+                    Name = "Info", BackgroundTransparency = 1,
                     Position = UDim2.new(0, 76, 0, 4),
-                    Size = UDim2.new(1, -156, 1, -8),
-                    ZIndex = 9,
-                    Parent = DetailPanel,
+                    Size = UDim2.new(1, -156, 1, -8), ZIndex = 9, Parent = DetailPanel,
                 })
                 local function mkInfoRow(idx)
                     local row = Create("TextLabel", {
-                        Text = "",
-                        Size = UDim2.new(1, 0, 0, 14),
+                        Text = "", Size = UDim2.new(1, 0, 0, 14),
                         Position = UDim2.new(0, 0, 0, (idx - 1) * 15),
-                        BackgroundTransparency = 1,
-                        FontFace = true,
-                        TextSize = Library.Config.FontSize,
-                        TextColor3 = Library.Theme.Text,
+                        BackgroundTransparency = 1, FontFace = true,
+                        TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text,
                         TextXAlignment = Enum.TextXAlignment.Left,
                         TextYAlignment = Enum.TextYAlignment.Center,
-                        ZIndex = 10,
-                        Parent = InfoHolder,
-                        TextStrokeTransparency = 0,
-                        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                        ZIndex = 10, Parent = InfoHolder,
+                        TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
                     table.insert(Library.Elements.PlayerListInfoLabels, row)
                     return row
@@ -1298,47 +1196,33 @@ function Library:Window(title, size)
                 local AgeRow  = mkInfoRow(4)
 
                 local ButtonsCol = Create("Frame", {
-                    Name = "Buttons",
-                    BackgroundTransparency = 1,
+                    Name = "Buttons", BackgroundTransparency = 1,
                     Position = UDim2.new(1, -84, 0, 6),
-                    Size = UDim2.new(0, 78, 1, -12),
-                    ZIndex = 9,
-                    Parent = DetailPanel,
+                    Size = UDim2.new(0, 78, 1, -12), ZIndex = 9, Parent = DetailPanel,
                 })
                 Create("UIListLayout", {
                     FillDirection = Enum.FillDirection.Vertical,
                     VerticalAlignment = Enum.VerticalAlignment.Top,
                     SortOrder = Enum.SortOrder.LayoutOrder,
-                    Padding = UDim.new(0, 4),
-                    Parent = ButtonsCol,
+                    Padding = UDim.new(0, 4), Parent = ButtonsCol,
                 })
-
                 local function mkActionBtn(text, order)
                     local Btn = Create("TextButton", {
-                        Text = "",
-                        Size = UDim2.new(1, 0, 0, 38),
+                        Text = "", Size = UDim2.new(1, 0, 0, 38),
                         BackgroundColor3 = Library.Theme.SectionBackground,
-                        BorderSizePixel = 0,
-                        AutoButtonColor = false,
-                        LayoutOrder = order,
-                        ZIndex = 10,
-                        Parent = ButtonsCol,
-                        ClipsDescendants = true,
+                        BorderSizePixel = 0, AutoButtonColor = false,
+                        LayoutOrder = order, ZIndex = 10,
+                        Parent = ButtonsCol, ClipsDescendants = true,
                     })
                     ApplyCelestiteStyle(Btn)
                     Create("TextLabel", {
-                        Text = text,
-                        Size = UDim2.new(1, 0, 1, 0),
-                        BackgroundTransparency = 1,
-                        FontFace = true,
-                        TextSize = Library.Config.FontSize,
-                        TextColor3 = Library.Theme.Text,
+                        Text = text, Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1, FontFace = true,
+                        TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text,
                         TextXAlignment = Enum.TextXAlignment.Center,
                         TextYAlignment = Enum.TextYAlignment.Center,
-                        ZIndex = 11,
-                        Parent = Btn,
-                        TextStrokeTransparency = 0,
-                        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                        ZIndex = 11, Parent = Btn,
+                        TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
                     table.insert(Library.Elements.Buttons, Btn)
                     Btn.InputBegan:Connect(function(input)
@@ -1348,7 +1232,6 @@ function Library:Window(title, size)
                     end)
                     return Btn
                 end
-
                 local TPBtn       = mkActionBtn("TP", 1)
                 local SpectateBtn = mkActionBtn("Spectate", 2)
 
@@ -1364,11 +1247,9 @@ function Library:Window(title, size)
 
                 local function UpdateDetail(player)
                     if not player or not player.Parent then
-                        Thumb.Image  = ""
-                        IdRow.Text   = "Id : -"
-                        NameRow.Text = "Display Name : -"
-                        UserRow.Text = "Name : -"
-                        AgeRow.Text  = "Account Age : -"
+                        Thumb.Image = ""
+                        IdRow.Text = "Id : -"; NameRow.Text = "Display Name : -"
+                        UserRow.Text = "Name : -"; AgeRow.Text = "Account Age : -"
                         return
                     end
                     Thumb.Image  = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
@@ -1381,61 +1262,39 @@ function Library:Window(title, size)
                 end
 
                 local Rows = {}
-
                 local function CreateRow(player)
                     local row = Create("Frame", {
-                        Name = player.Name,
-                        Size = UDim2.new(1, 0, 0, rowHeight),
+                        Name = player.Name, Size = UDim2.new(1, 0, 0, rowHeight),
                         BackgroundColor3 = Library.Theme.DarkBackground,
-                        BorderSizePixel = 0,
-                        ZIndex = 6,
-                        Parent = ListHolder,
+                        BorderSizePixel = 0, ZIndex = 6, Parent = ListHolder,
                     })
                     local nameL = Create("TextLabel", {
-                        Text = player.Name,
-                        Size = UDim2.new(1, -100, 1, 0),
+                        Text = player.Name, Size = UDim2.new(1, -100, 1, 0),
                         Position = UDim2.new(0, 6, 0, 0),
-                        BackgroundTransparency = 1,
-                        FontFace = true,
-                        TextSize = Library.Config.FontSize,
-                        TextColor3 = Library.Theme.Text,
-                        TextXAlignment = Enum.TextXAlignment.Left,
-                        ZIndex = 7,
-                        Parent = row,
-                        TextStrokeTransparency = 0,
-                        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                        BackgroundTransparency = 1, FontFace = true,
+                        TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text,
+                        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = row,
+                        TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
                     local statusL = Create("TextLabel", {
-                        Text = "None",
-                        Size = UDim2.new(0, 90, 1, 0),
+                        Text = "None", Size = UDim2.new(0, 90, 1, 0),
                         Position = UDim2.new(1, -94, 0, 0),
-                        BackgroundTransparency = 1,
-                        FontFace = true,
-                        TextSize = Library.Config.FontSize,
-                        TextColor3 = Library.Theme.InactiveText,
-                        TextXAlignment = Enum.TextXAlignment.Right,
-                        ZIndex = 7,
-                        Parent = row,
-                        TextStrokeTransparency = 0,
-                        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                        BackgroundTransparency = 1, FontFace = true,
+                        TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.InactiveText,
+                        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 7, Parent = row,
+                        TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
                     local divider = Create("Frame", {
                         Size = UDim2.new(1, 0, 0, 1),
                         Position = UDim2.new(0, 0, 1, -1),
                         BackgroundColor3 = Library.Theme.Inline,
-                        BorderSizePixel = 0,
-                        ZIndex = 7,
-                        Parent = row,
+                        BorderSizePixel = 0, ZIndex = 7, Parent = row,
                     })
                     table.insert(Library.Elements.PlayerListDividers, divider)
                     local click = Create("TextButton", {
-                        Size = UDim2.new(1, 0, 1, 0),
-                        BackgroundTransparency = 1,
-                        Text = "",
-                        TextTransparency = 1,
-                        AutoButtonColor = false,
-                        ZIndex = 8,
-                        Parent = row,
+                        Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+                        Text = "", TextTransparency = 1, AutoButtonColor = false,
+                        ZIndex = 8, Parent = row,
                     })
                     click.MouseButton1Click:Connect(function()
                         SelectedPlayer = player
@@ -1461,8 +1320,7 @@ function Library:Window(title, size)
                     end)
                     for player, data in pairs(Rows) do
                         if not player.Parent or not table.find(players, player) then
-                            data.Row:Destroy()
-                            Rows[player] = nil
+                            data.Row:Destroy(); Rows[player] = nil
                             if SelectedPlayer == player then
                                 SelectedPlayer = Players.LocalPlayer
                                 UpdateDetail(SelectedPlayer)
@@ -1472,8 +1330,7 @@ function Library:Window(title, size)
                     for i, player in ipairs(players) do
                         local data = Rows[player]
                         if not data then
-                            data = CreateRow(player)
-                            Rows[player] = data
+                            data = CreateRow(player); Rows[player] = data
                         end
                         data.Row.LayoutOrder = i
                         data.IsLocal = (player == Players.LocalPlayer)
@@ -1519,7 +1376,6 @@ function Library:Window(title, size)
                     if not SelectedPlayer or not SelectedPlayer.Parent then return end
                     if popts.OnTeleport then popts.OnTeleport(SelectedPlayer) end
                 end)
-
                 SpectateBtn.MouseButton1Click:Connect(function()
                     if not SelectedPlayer or not SelectedPlayer.Parent then return end
                     local m = getMeta(SelectedPlayer)
@@ -1655,10 +1511,8 @@ function Library:Window(title, size)
         FontFace = true,
         TextSize = Library.Config.FontSize,
         TextColor3 = Library.Theme.Text,
-        ZIndex = 10000,
-        Parent = ScreenGui,
-        TextStrokeTransparency = 0,
-        TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        ZIndex = 10000, Parent = ScreenGui,
+        TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     })
     local ToggleCorner = Instance.new("UICorner")
     ToggleCorner.CornerRadius = UDim.new(1, 0)
