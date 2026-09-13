@@ -1,11 +1,12 @@
 --[[
-    Celestite UI Library - V2.11.2 (Full)
-    • FIX: tab underline shows reliably
-        - Skip the current tab in the reset loop (no more tween race)
-        - Underline sits flush at the bottom of the tab, 2px tall
-        - AnchorPoint = (0.5, 1) → grows from the center outward
-    • Proggy font, locked full-fill tabs, TP/Spectate, popup cleanup,
-      smooth sliders/color pickers, accent-colored ripple wave on buttons
+    Celestite UI Library - V2.11.4 (Full)
+    • Slider value label is now an editable TextBox
+        – Click the number, type a value, press Enter
+        – Out-of-range or non-numeric input reverts to the previous value
+    • Tab underline (2px, anchored to the bottom of the tab)
+    • Ripple wave on buttons, smooth sliders + color pickers
+    • Animated dropdowns (slide down on open, up on close)
+    • Proggy-only font, locked full-fill tabs, TP/Spectate, popup cleanup
 ]]
 
 local Players      = game:GetService("Players")
@@ -239,15 +240,10 @@ function Library:UpdateTheme()
         if sli.Back then sli.Back.BackgroundColor3 = Library.Theme.SectionBackground end
     end
     for _, drop in pairs(Library.Elements.Dropdowns) do
+        if drop.Container then drop.Container.BackgroundColor3 = Library.Theme.DarkBackground end
         if drop.Box then drop.Box.BackgroundColor3 = Library.Theme.SectionBackground end
-        if drop.Label then drop.Label.TextColor3 = Library.Theme.Text end
         if drop.ValueLabel then drop.ValueLabel.TextColor3 = Library.Theme.Text end
         if drop.Arrow then drop.Arrow.TextColor3 = Library.Theme.Text end
-        drop.Container.BackgroundColor3 = Library.Theme.DarkBackground
-        for _, btn in pairs(drop.Buttons or {}) do
-            btn.TextColor3 = Library.Theme.Text
-            if btn:IsA("TextButton") then btn.BackgroundColor3 = Library.Theme.DarkBackground end
-        end
     end
     for _, cp in pairs(Library.Elements.ColorPickers) do
         cp.Frame.BackgroundColor3 = Library.Theme.SectionBackground
@@ -555,43 +551,35 @@ function Library:Window(title, size)
     function Window:Tab(name)
         local Tab = {}
 
-        -- Tab button
         local TabButton = Create("TextButton", {
-            Name = name,
-            Text = name,
+            Name = name, Text = name,
             Size = UDim2.new(0, 0, 1, 0),
             AutomaticSize = Enum.AutomaticSize.X,
             BackgroundTransparency = 1,
             FontFace = true,
             TextSize = Library.Config.FontSize,
             TextColor3 = Library.Theme.InactiveText,
-            AutoButtonColor = false,
-            ZIndex = 3,
+            AutoButtonColor = false, ZIndex = 3,
             Parent = TabBar,
             TextStrokeTransparency = 0,
             TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
             ClipsDescendants = false,
         })
 
-        -- Bottom accent underline: 2px tall, anchored at the bottom-center of the tab
         local TabAccent = Create("Frame", {
             Name = "Accent",
             AnchorPoint = Vector2.new(0.5, 1),
             Position    = UDim2.new(0.5, 0, 1, 0),
             Size        = UDim2.new(0, 0, 0, 2),
             BackgroundColor3 = Library.Theme.Accent,
-            BorderSizePixel = 0,
-            ZIndex = 5,
-            Parent = TabButton,
+            BorderSizePixel = 0, ZIndex = 5, Parent = TabButton,
         })
 
         local TabPage = Create("Frame", {
             Name = name .. "_Page",
             Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1,
-            Visible = false,
-            ZIndex = 2,
-            Parent = ContentArea
+            BackgroundTransparency = 1, Visible = false,
+            ZIndex = 2, Parent = ContentArea
         })
 
         local LeftColumn = Create("Frame", {
@@ -620,7 +608,6 @@ function Library:Window(title, size)
 
         Tab._locked = false
 
-        -- Activate: skip the current tab in the reset loop → no more tween race
         local function Activate()
             for _, t in pairs(Window.Tabs) do
                 if t.Button ~= TabButton then
@@ -980,40 +967,95 @@ function Library:Window(title, size)
                 return ToggleObj
             end
 
+            --=================================================================
+            -- SLIDER  (value is now an editable TextBox)
+            --=================================================================
             function Section:Slider(sopts)
                 local min, max = sopts.Min, sopts.Max
                 local val = sopts.Default or min
                 local sliding = false
+
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
-                local Value = Create("TextLabel", { Text = tostring(val), Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+
+                -- Editable value field (right-aligned, transparent)
+                local Value = Create("TextBox", {
+                    Text = tostring(val),
+                    Size = UDim2.new(0, 60, 0, 14),
+                    Position = UDim2.new(1, -60, 0, 0),
+                    BackgroundTransparency = 1,
+                    FontFace = true,
+                    TextSize = Library.Config.FontSize,
+                    TextColor3 = Library.Theme.Text,
+                    TextXAlignment = Enum.TextXAlignment.Right,
+                    ClearTextOnFocus = false,
+                    ZIndex = 7,
+                    Parent = Holder,
+                    TextStrokeTransparency = 0,
+                    TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                })
                 table.insert(Library.Elements.Labels, Value)
-                local Label = Create("TextLabel", { Text = sopts.Name or "Slider", Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+
+                local Label = Create("TextLabel", {
+                    Text = sopts.Name or "Slider",
+                    Size = UDim2.new(1, -64, 0, 14),
+                    Position = UDim2.new(0, 0, 0, 0),
+                    BackgroundTransparency = 1, FontFace = true,
+                    TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text,
+                    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
+                    Parent = Holder,
+                    TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                })
                 table.insert(Library.Elements.Labels, Label)
-                local SliderBack = Create("Frame", { Name = "SliderBack", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 16), BackgroundColor3 = Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
+
+                local SliderBack = Create("Frame", {
+                    Name = "SliderBack", Size = UDim2.new(1, 0, 0, 8),
+                    Position = UDim2.new(0, 0, 0, 16),
+                    BackgroundColor3 = Library.Theme.SectionBackground,
+                    BorderSizePixel = 0, ZIndex = 7, Parent = Holder,
+                })
                 ApplyCelestiteStyle(SliderBack)
-                local SliderFill = Create("Frame", { Name = "Fill", Size = UDim2.new((val - min) / (max - min), 0, 1, 0), BackgroundColor3 = Library.Theme.Accent, BorderSizePixel = 0, ZIndex = 8, Parent = SliderBack })
+
+                local SliderFill = Create("Frame", {
+                    Name = "Fill",
+                    Size = UDim2.new((val - min) / (max - min), 0, 1, 0),
+                    BackgroundColor3 = Library.Theme.Accent,
+                    BorderSizePixel = 0, ZIndex = 8, Parent = SliderBack,
+                })
                 table.insert(Library.Elements.Sliders, { Fill = SliderFill, Label = Label, Value = Value, Back = SliderBack })
-                local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", TextTransparency = 1, ZIndex = 10, Parent = SliderBack })
+
+                local btn = Create("TextButton", {
+                    Size = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1, Text = "", TextTransparency = 1,
+                    ZIndex = 10, Parent = SliderBack,
+                })
 
                 local function tweenFill(pct)
                     Tween(SliderFill, { Size = UDim2.new(pct, 0, 1, 0) }, 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
                 end
-                local function update(input)
-                    local pct = math.clamp((input.Position.X - SliderBack.AbsolutePosition.X) / SliderBack.AbsoluteSize.X, 0, 1)
-                    val = math.floor(min + (max - min) * pct)
+
+                local function applyValue(newVal, fireCallback)
+                    val = math.floor(newVal)
+                    local pct = (val - min) / (max - min)
                     tweenFill(pct)
-                    Value.Text = tostring(val)
-                    if sopts.Callback then sopts.Callback(val) end
-                end
-                local function Set(v, fireCallback)
-                    val = v
-                    tweenFill((val - min) / (max - min))
                     Value.Text = tostring(val)
                     if fireCallback ~= false and sopts.Callback then sopts.Callback(val) end
                 end
+
+                -- Programmatic setter (used by Library.Flags and by dragging)
+                local function Set(v, fireCallback)
+                    applyValue(v, fireCallback)
+                end
+
+                -- Drag handler
+                local function update(input)
+                    local pct = math.clamp((input.Position.X - SliderBack.AbsolutePosition.X) / SliderBack.AbsoluteSize.X, 0, 1)
+                    applyValue(min + (max - min) * pct, true)
+                end
+
                 btn.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        sliding = true; update(input)
+                        sliding = true
+                        update(input)
                     end
                 end)
                 UIS.InputChanged:Connect(function(input)
@@ -1027,11 +1069,26 @@ function Library:Window(title, size)
                     end
                 end)
                 UIS.WindowFocusReleased:Connect(function() sliding = false end)
+
+                -- Editable value field: parse on focus lost / Enter, revert if invalid
+                Value.FocusLost:Connect(function(enterPressed)
+                    local parsed = tonumber(Value.Text)
+                    if parsed and parsed >= min and parsed <= max then
+                        applyValue(parsed, true)
+                    else
+                        -- Not a number, or out of range → snap back to current value
+                        Value.Text = tostring(val)
+                    end
+                end)
+
                 local Obj = { Get = function() return val end, Set = Set }
                 Library.Flags[sopts.Flag or sopts.Name] = Obj
                 return Obj
             end
 
+            --=================================================================
+            -- DROPDOWN WITH SLIDE ANIMATION
+            --=================================================================
             function Section:Dropdown(dopts)
                 local dropped = false
                 local selected = dopts.Default or (dopts.Options and dopts.Options[1]) or "None"
@@ -1046,16 +1103,59 @@ function Library:Window(title, size)
                 table.insert(Library.Elements.Labels, Arrow)
                 local Button = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 9, Parent = Box })
 
-                local DropContainer = Create("Frame", { Name = "DropContainer", BackgroundColor3 = Library.Theme.DarkBackground, BorderSizePixel = 0, Visible = false, ZIndex = 5000, Parent = ScreenGui, ClipsDescendants = true })
-                ApplyCelestiteStyle(DropContainer)
-                local OptionHolder = Create("ScrollingFrame", { Name = "Options", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5001, Parent = DropContainer, ScrollBarThickness = 2, CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
+                local LIST_ITEM_H = 18
+                local MAX_VISIBLE = 8
+
+                local DropOuter = Create("Frame", {
+                    Name = "DropContainer",
+                    BackgroundTransparency = 1,
+                    Visible = false,
+                    ClipsDescendants = true,
+                    ZIndex = 5000,
+                    Parent = ScreenGui,
+                })
+                local DropInner = Create("Frame", {
+                    Name = "DropInner",
+                    BackgroundColor3 = Library.Theme.DarkBackground,
+                    BorderSizePixel = 0,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Position = UDim2.new(0, 0, 0, 0),
+                    ZIndex = 5001,
+                    Parent = DropOuter,
+                })
+                ApplyCelestiteStyle(DropInner)
+                table.insert(Library.Elements.Dropdowns, {
+                    Box = Box, Label = Label, ValueLabel = ValueLabel,
+                    Arrow = Arrow, Container = DropInner, Buttons = {}
+                })
+
+                local OptionHolder = Create("ScrollingFrame", {
+                    Name = "Options",
+                    Size = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1, BorderSizePixel = 0,
+                    ZIndex = 5002, Parent = DropInner,
+                    ScrollBarThickness = 2,
+                    CanvasSize = UDim2.new(0, 0, 0, 0),
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                })
                 Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
 
-                Library:RegisterPopup(function()
-                    dropped = false
-                    DropContainer.Visible = false
+                local currentListHeight = 0
+                local dropOpen = false
+                local openTween, closeTween
+
+                local function finishClose()
+                    DropOuter.Visible = false
+                    dropOpen = false
                     Arrow.Text = "v"
                     Arrow.Position = UDim2.new(1, -20, 0, -1)
+                end
+
+                Library:RegisterPopup(function()
+                    if openTween then openTween:Cancel() end
+                    if closeTween then closeTween:Cancel() end
+                    DropInner.Position = UDim2.new(0, 0, 0, 0)
+                    finishClose()
                 end)
 
                 local function UpdateList(new)
@@ -1063,57 +1163,136 @@ function Library:Window(title, size)
                     local options = dopts.Options or {}
                     OptionHolder:ClearAllChildren()
                     Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = OptionHolder })
+
                     if #options == 0 then
-                        Create("TextLabel", { Text = "No Configs Found", Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.InactiveText, ZIndex = 5005, Parent = OptionHolder, TextXAlignment = Enum.TextXAlignment.Center })
+                        Create("TextLabel", {
+                            Text = "No Configs Found",
+                            Size = UDim2.new(1, 0, 0, LIST_ITEM_H),
+                            BackgroundTransparency = 1, FontFace = true,
+                            TextSize = Library.Config.FontSize,
+                            TextColor3 = Library.Theme.InactiveText,
+                            ZIndex = 5005, Parent = OptionHolder,
+                            TextXAlignment = Enum.TextXAlignment.Center,
+                        })
                     else
                         for _, option in ipairs(options) do
-                            local optBtn = Create("TextButton", { Text = tostring(option), Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = (tostring(option) == tostring(selected)) and Library.Theme.Accent or Library.Theme.Text, BorderSizePixel = 0, ZIndex = 5005, Parent = OptionHolder, TextXAlignment = Enum.TextXAlignment.Left, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+                            local optBtn = Create("TextButton", {
+                                Text = tostring(option),
+                                Size = UDim2.new(1, 0, 0, LIST_ITEM_H),
+                                BackgroundTransparency = 1, FontFace = true,
+                                TextSize = Library.Config.FontSize,
+                                TextColor3 = (tostring(option) == tostring(selected))
+                                    and Library.Theme.Accent or Library.Theme.Text,
+                                BorderSizePixel = 0, ZIndex = 5005,
+                                Parent = OptionHolder,
+                                TextXAlignment = Enum.TextXAlignment.Left,
+                                TextStrokeTransparency = 0,
+                                TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                            })
                             Create("UIPadding", { PaddingLeft = UDim.new(0, 6), Parent = optBtn })
                             optBtn.MouseButton1Click:Connect(function()
                                 selected = option
                                 ValueLabel.Text = tostring(option)
-                                dropped = false; DropContainer.Visible = false
-                                Arrow.Text = "v"; Arrow.Position = UDim2.new(1, -20, 0, -1)
                                 if dopts.Callback then dopts.Callback(option) end
+                                if dropOpen then
+                                    if openTween then openTween:Cancel() end
+                                    if closeTween then closeTween:Cancel() end
+                                    dropOpen = false
+                                    local h = currentListHeight
+                                    closeTween = TweenService:Create(
+                                        DropInner,
+                                        TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                                        { Position = UDim2.new(0, 0, 0, -h) }
+                                    )
+                                    closeTween.Completed:Connect(finishClose)
+                                    closeTween:Play()
+                                    Arrow.Text = "v"
+                                    Arrow.Position = UDim2.new(1, -20, 0, -1)
+                                else
+                                    finishClose()
+                                end
                                 UpdateList()
                             end)
                         end
                     end
-                    local h = math.clamp(#options * 18, 18, 200)
-                    if #options == 0 then h = 18 end
-                    DropContainer.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, h)
+
+                    local h = math.clamp(#options * LIST_ITEM_H, LIST_ITEM_H, MAX_VISIBLE * LIST_ITEM_H)
+                    if #options == 0 then h = LIST_ITEM_H end
+                    currentListHeight = h
+                    DropOuter.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, h)
+                end
+
+                local function openDropdown()
+                    if dopts.OnOpen then dopts.OnOpen() end
+                    task.defer(function()
+                        UpdateList()
+                        local absPos = Box.AbsolutePosition
+                        local absSz  = Box.AbsoluteSize
+                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
+                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
+
+                        DropInner.Position = UDim2.new(0, 0, 0, -currentListHeight)
+                        DropOuter.Visible = true
+                        dropOpen = true
+
+                        if openTween then openTween:Cancel() end
+                        if closeTween then closeTween:Cancel() end
+
+                        openTween = TweenService:Create(
+                            DropInner,
+                            TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                            { Position = UDim2.new(0, 0, 0, 0) }
+                        )
+                        openTween:Play()
+
+                        Arrow.Text = "^"
+                        Arrow.Position = UDim2.new(1, -20, 0, 2)
+                    end)
+                end
+
+                local function closeDropdown()
+                    if not dropOpen then return end
+                    if openTween then openTween:Cancel() end
+                    if closeTween then closeTween:Cancel() end
+                    dropOpen = false
+
+                    closeTween = TweenService:Create(
+                        DropInner,
+                        TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                        { Position = UDim2.new(0, 0, 0, -currentListHeight) }
+                    )
+                    closeTween.Completed:Connect(finishClose)
+                    closeTween:Play()
+
+                    Arrow.Text = "v"
+                    Arrow.Position = UDim2.new(1, -20, 0, -1)
                 end
 
                 Button.MouseButton1Click:Connect(function()
-                    dropped = not dropped
-                    if dropped then
-                        if dopts.OnOpen then dopts.OnOpen() end
-                        task.defer(function()
-                            UpdateList()
-                            DropContainer.Position = UDim2.new(0, Box.AbsolutePosition.X, 0, Box.AbsolutePosition.Y + 20)
-                            DropContainer.Size = UDim2.new(0, Box.AbsoluteSize.X, 0, DropContainer.Size.Y.Offset)
-                            DropContainer.Visible = true
-                            Arrow.Text = "^"; Arrow.Position = UDim2.new(1, -20, 0, 2)
-                        end)
-                    else
-                        DropContainer.Visible = false
-                        Arrow.Text = "v"; Arrow.Position = UDim2.new(1, -20, 0, -1)
-                    end
+                    if dropOpen then closeDropdown() else openDropdown() end
                 end)
 
                 UIS.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 and dropped then
-                        if not IsWithin(DropContainer, input) and not IsWithin(Box, input) then
-                            dropped = false; DropContainer.Visible = false
-                            Arrow.Text = "v"; Arrow.Position = UDim2.new(1, -20, 0, -1)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 and dropOpen then
+                        if not IsWithin(DropOuter, input) and not IsWithin(Box, input) then
+                            closeDropdown()
                         end
+                    end
+                end)
+
+                Box:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+                    if dropOpen then
+                        local absPos = Box.AbsolutePosition
+                        local absSz  = Box.AbsoluteSize
+                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
+                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
                     end
                 end)
 
                 local Obj = {
                     Get = function() return selected end,
                     Set = function(v) selected = v; ValueLabel.Text = tostring(v); UpdateList() end,
-                    Refresh = function(new) UpdateList(new) end
+                    Refresh = function(new) UpdateList(new) end,
                 }
                 Library.Flags[dopts.Flag or dopts.Name] = Obj
                 return Obj
