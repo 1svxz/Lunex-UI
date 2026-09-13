@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.19 (Full + Extras)
+    Celestite UI Library - V2.20 (Full)
     • Font: Enum.Font.SourceSansBold (built-in, no downloads)
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
@@ -9,6 +9,8 @@
     • V2.18: 3-layer keybind box (Outline / DarkBackground / Inline stroke)
     • V2.18: Watermark matching topbar design (accent line + inline outline)
     • V2.19: Added Divider, Label (+ColorPicker / +Keybind), MultiDropdown
+    • V2.20: Dropdowns close on tab switch, snap-update on drag,
+             MultiDropdown styled like single Dropdown (no checkboxes)
 ]]
 
 local Players      = game:GetService("Players")
@@ -17,6 +19,7 @@ local TweenService = game:GetService("TweenService")
 local CoreGui      = game:GetService("CoreGui")
 local HttpService  = game:GetService("HttpService")
 local TextService  = game:GetService("TextService")
+local RunService   = game:GetService("RunService")
 
 local Library = { Config = { FontSize = 14 } }
 
@@ -266,7 +269,6 @@ function Library:UpdateTheme()
         if lbl.Parent then lbl.TextColor3 = Library.Theme.Text end
     end
 
-    -- ─── Keybind boxes ───
     for _, kb in pairs(Library.Elements.KeybindBoxes) do
         if kb.Outer and kb.Outer.Parent then
             kb.Outer.BackgroundColor3 = Library.Theme.Outline
@@ -279,7 +281,6 @@ function Library:UpdateTheme()
         end
     end
 
-    -- ─── Watermarks ───
     for _, wm in pairs(Library.Elements.Watermarks) do
         if wm.Parent then wm.BackgroundColor3 = Library.Theme.Background end
     end
@@ -769,6 +770,9 @@ function Library:Window(title, size)
         Tab._locked = false
 
         local function Activate()
+            -- ✦ FIX: close any open dropdowns / popups when switching tabs
+            Library:CloseAllPopups()
+
             for _, t in pairs(Window.Tabs) do
                 if t.Button ~= TabButton then
                     t.Page.Visible = false
@@ -1341,9 +1345,25 @@ function Library:Window(title, size)
                 local currentListHeight = 0
                 local dropOpen = false
                 local openTween, closeTween
+                local trackConn   -- ✦ FIX: RenderStepped tracker (no lag on drag)
+
+                local function StartTrack()
+                    if trackConn then trackConn:Disconnect() end
+                    trackConn = RunService.RenderStepped:Connect(function()
+                        if not dropOpen or not Box.Parent then return end
+                        local absPos = Box.AbsolutePosition
+                        local absSz  = Box.AbsoluteSize
+                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
+                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
+                    end)
+                end
+                local function StopTrack()
+                    if trackConn then trackConn:Disconnect(); trackConn = nil end
+                end
 
                 local function finishClose()
                     if dropOpen then return end
+                    StopTrack()
                     DropOuter.Visible = false
                     Arrow.Text = "v"
                     Arrow.Position = UDim2.new(1, -20, 0, -1)
@@ -1446,6 +1466,8 @@ function Library:Window(title, size)
 
                         Arrow.Text = "^"
                         Arrow.Position = UDim2.new(1, -20, 0, 2)
+
+                        StartTrack()  -- ✦ snap-tracks the button position every frame
                     end)
                 end
 
@@ -1479,15 +1501,6 @@ function Library:Window(title, size)
                     end
                 end)
 
-                Box:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-                    if dropOpen then
-                        local absPos = Box.AbsolutePosition
-                        local absSz  = Box.AbsoluteSize
-                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
-                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
-                    end
-                end)
-
                 local Obj = {
                     Get = function() return selected end,
                     Set = function(v) selected = v; ValueLabel.Text = tostring(v); UpdateList() end,
@@ -1498,7 +1511,7 @@ function Library:Window(title, size)
             end
 
             -------------------------------------------------
-            -- DIVIDER (NEW)
+            -- DIVIDER
             -------------------------------------------------
             function Section:Divider(dopts)
                 dopts = dopts or {}
@@ -1521,7 +1534,7 @@ function Library:Window(title, size)
             end
 
             -------------------------------------------------
-            -- LABEL (+ :ColorPicker / :Keybind)  (NEW)
+            -- LABEL (+ :ColorPicker / :Keybind)
             -------------------------------------------------
             function Section:Label(lopts)
                 lopts = lopts or {}
@@ -1805,7 +1818,7 @@ function Library:Window(title, size)
             end
 
             -------------------------------------------------
-            -- MULTI DROPDOWN (NEW)
+            -- MULTI DROPDOWN  (styled like single Dropdown)
             -------------------------------------------------
             function Section:MultiDropdown(mopts)
                 mopts = mopts or {}
@@ -1927,9 +1940,25 @@ function Library:Window(title, size)
                 local currentListHeight = 0
                 local dropOpen = false
                 local openTween, closeTween
+                local trackConn
+
+                local function StartTrack()
+                    if trackConn then trackConn:Disconnect() end
+                    trackConn = RunService.RenderStepped:Connect(function()
+                        if not dropOpen or not Box.Parent then return end
+                        local absPos = Box.AbsolutePosition
+                        local absSz  = Box.AbsoluteSize
+                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
+                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
+                    end)
+                end
+                local function StopTrack()
+                    if trackConn then trackConn:Disconnect(); trackConn = nil end
+                end
 
                 local function finishClose()
                     if dropOpen then return end
+                    StopTrack()
                     DropOuter.Visible = false
                     Arrow.Text = "v"
                     Arrow.Position = UDim2.new(1, -20, 0, -1)
@@ -1948,6 +1977,8 @@ function Library:Window(title, size)
                     if mopts.Callback then mopts.Callback(GetSelectedList()) end
                 end
 
+                -- ✦ Options styled EXACTLY like single-dropdown: plain text rows,
+                --   accent color when selected. Clicking toggles selection.
                 local function UpdateList(new)
                     if new then options = new; mopts.Options = new end
                     OptionHolder:ClearAllChildren()
@@ -1965,43 +1996,28 @@ function Library:Window(title, size)
                         })
                     else
                         for _, option in ipairs(options) do
-                            local row = Create("TextButton", {
-                                Text = "", Size = UDim2.new(1, 0, 0, LIST_ITEM_H),
-                                BackgroundTransparency = 1, AutoButtonColor = false,
-                                ZIndex = 5005, Parent = OptionHolder,
-                            })
-
-                            local CheckOuter = Create("Frame", {
-                                Name = "Check",
-                                Size = UDim2.new(0, 10, 0, 10),
-                                Position = UDim2.new(0, 6, 0.5, -5),
-                                BackgroundColor3 = selectedSet[option]
-                                    and Library.Theme.Accent
-                                    or  Library.Theme.SectionBackground,
-                                BorderSizePixel = 0, ZIndex = 5006, Parent = row,
-                            })
-                            ApplyCelestiteStyle(CheckOuter)
-
-                            local OptLabel = Create("TextLabel", {
+                            local optBtn = Create("TextButton", {
                                 Text = tostring(option),
-                                Size = UDim2.new(1, -24, 1, 0),
-                                Position = UDim2.new(0, 22, 0, 0),
+                                Size = UDim2.new(1, 0, 0, LIST_ITEM_H),
                                 BackgroundTransparency = 1, Font = UI_FONT,
                                 TextSize = Library.Config.FontSize,
-                                TextColor3 = Library.Theme.Text,
+                                TextColor3 = selectedSet[option]
+                                    and Library.Theme.Accent
+                                    or  Library.Theme.Text,
+                                BorderSizePixel = 0, ZIndex = 5005,
+                                Parent = OptionHolder,
                                 TextXAlignment = Enum.TextXAlignment.Left,
-                                TextYAlignment = Enum.TextYAlignment.Center,
-                                ZIndex = 5006, Parent = row,
                                 TextStrokeTransparency = 0,
                                 TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                             })
+                            Create("UIPadding", { PaddingLeft = UDim.new(0, 6), Parent = optBtn })
 
-                            row.MouseButton1Click:Connect(function()
+                            optBtn.MouseButton1Click:Connect(function()
                                 selectedSet[option] = not selectedSet[option]
-                                Tween(CheckOuter, {
-                                    BackgroundColor3 = selectedSet[option]
+                                Tween(optBtn, {
+                                    TextColor3 = selectedSet[option]
                                         and Library.Theme.Accent
-                                        or  Library.Theme.SectionBackground,
+                                        or  Library.Theme.Text,
                                 }, 0.12)
                                 FireCallback()
                             end)
@@ -2039,6 +2055,8 @@ function Library:Window(title, size)
 
                         Arrow.Text = "^"
                         Arrow.Position = UDim2.new(1, -20, 0, 2)
+
+                        StartTrack()
                     end)
                 end
 
@@ -2069,15 +2087,6 @@ function Library:Window(title, size)
                         if not IsWithin(DropOuter, input) and not IsWithin(Box, input) then
                             closeDropdown()
                         end
-                    end
-                end)
-
-                Box:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-                    if dropOpen then
-                        local absPos = Box.AbsolutePosition
-                        local absSz  = Box.AbsoluteSize
-                        DropOuter.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSz.Y + 2)
-                        DropOuter.Size = UDim2.new(0, absSz.X, 0, currentListHeight)
                     end
                 end)
 
@@ -2484,7 +2493,7 @@ function Library:Window(title, size)
     task.delay(0.2, function() Library:UpdateTheme() end)
 
     --=============================================================
-    -- AUTO-SIZING TOGGLE BUTTON (default "UI Toggle")
+    -- AUTO-SIZING TOGGLE BUTTON
     --=============================================================
     local TOGGLE_LABEL_SIZE = 14
     local TOGGLE_LABEL_PAD  = 20
