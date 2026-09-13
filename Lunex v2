@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.21 (Full)
+    Celestite UI Library - V2.22 (Full)
     • Font: Enum.Font.SourceSansBold (built-in, no downloads)
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
@@ -11,8 +11,9 @@
     • V2.19: Added Divider, Label (+ColorPicker / +Keybind), MultiDropdown
     • V2.20: Dropdowns close on tab switch, snap-update on drag,
              MultiDropdown styled like single Dropdown (no checkboxes)
-    • V2.21: Config folder is now configurable via Library:SetConfigFolder
-             Configs use a plaintext .cfg format (no JSON dependency)
+    • V2.21: Config folder is configurable + .cfg plaintext format (no JSON)
+    • V2.22: Only one dropdown open at a time — opening a new one closes
+             any previously-open dropdown (single + multi + popups)
 ]]
 
 local Players      = game:GetService("Players")
@@ -307,6 +308,24 @@ function Library:CloseAllPopups()
     local snap = {}
     for i, fn in ipairs(self.OpenPopups) do snap[i] = fn end
     for _, fn in ipairs(snap) do pcall(fn) end
+end
+
+-- ─── Currently-open dropdown tracker (only one can be open at a time) ───
+Library.CurrentDropdown = nil
+
+function Library:SetCurrentDropdown(closer)
+    if self.CurrentDropdown and self.CurrentDropdown ~= closer then
+        local prev = self.CurrentDropdown
+        self.CurrentDropdown = nil
+        pcall(prev)
+    end
+    self.CurrentDropdown = closer
+end
+
+function Library:ClearCurrentDropdown(closer)
+    if not closer or self.CurrentDropdown == closer then
+        self.CurrentDropdown = nil
+    end
 end
 
 function Library:UpdateTheme()
@@ -1477,6 +1496,7 @@ function Library:Window(title, size)
                 local function finishClose()
                     if dropOpen then return end
                     StopTrack()
+                    Library:ClearCurrentDropdown(closeDropdown)
                     DropOuter.Visible = false
                     Arrow.Text = "v"
                     Arrow.Position = UDim2.new(1, -20, 0, -1)
@@ -1487,6 +1507,7 @@ function Library:Window(title, size)
                     if closeTween then closeTween:Cancel() end
                     DropInner.Position = UDim2.new(0, 0, 0, 0)
                     dropOpen = false
+                    Library:ClearCurrentDropdown(closeDropdown)
                     finishClose()
                 end)
 
@@ -1555,6 +1576,7 @@ function Library:Window(title, size)
                 end
 
                 local function openDropdown()
+                    Library:SetCurrentDropdown(closeDropdown)
                     if dopts.OnOpen then dopts.OnOpen() end
                     task.defer(function()
                         UpdateList()
@@ -2063,6 +2085,7 @@ function Library:Window(title, size)
                 local function finishClose()
                     if dropOpen then return end
                     StopTrack()
+                    Library:ClearCurrentDropdown(closeDropdown)
                     DropOuter.Visible = false
                     Arrow.Text = "v"
                     Arrow.Position = UDim2.new(1, -20, 0, -1)
@@ -2073,6 +2096,7 @@ function Library:Window(title, size)
                     if closeTween then closeTween:Cancel() end
                     DropInner.Position = UDim2.new(0, 0, 0, 0)
                     dropOpen = false
+                    Library:ClearCurrentDropdown(closeDropdown)
                     finishClose()
                 end)
 
@@ -2133,6 +2157,7 @@ function Library:Window(title, size)
                 end
 
                 local function openDropdown()
+                    Library:SetCurrentDropdown(closeDropdown)
                     if mopts.OnOpen then mopts.OnOpen() end
                     task.defer(function()
                         UpdateList()
