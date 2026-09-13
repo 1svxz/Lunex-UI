@@ -1,6 +1,6 @@
 --[[
-    Celestite UI Library - V2.16 (Full)
-    • Font: RegisterFont("Verdana", ...) with fs-tahoma-8px.ttf URL
+    Celestite UI Library - V2.16.1 (Full)
+    • Font system: RegisterFont → getcustomasset fallback → Enum.Font.Code
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
     • Right-side auto-width notifications
@@ -106,32 +106,86 @@ end
 
 -------------------------------------------------
 -- FONT
---   Primary: RegisterFont("Verdana", 400, "Normal", { Id = "...", Font = HttpGet(url) })
---   Fallback: enum font
+--   1. RegisterFont("Verdana", 400, "Normal", {...})      (preferred)
+--   2. writefile + getcustomasset + Font.new               (fallback)
+--   3. Enum.Font.Code                                       (last resort)
+--
+--   The URL is fs-tahoma-8px which is the pixel font you asked for.
 -------------------------------------------------
+local FONT_URL = "https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/fs-tahoma-8px.ttf"
+local FONT_ID  = "CelestiteFont.ttf"
+local FONT_NAME = "Verdana"
+
 local LoadedFont = nil
+local FontMethod = "Enum.Font.Code"
+
+local function TryRegisterFont()
+    if type(RegisterFont) ~= "function" then
+        return false, "RegisterFont is not available"
+    end
+
+    local ok, result = pcall(function()
+        local family = RegisterFont(FONT_NAME, 400, "Normal", {
+            Id   = FONT_ID,
+            Font = game:HttpGet(FONT_URL),
+        })
+        if not family then error("RegisterFont returned nil") end
+        return Font.new(family, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    end)
+
+    if ok and result then
+        LoadedFont = result
+        FontMethod = "RegisterFont"
+        return true, nil
+    end
+    return false, tostring(result)
+end
+
+local function TryCustomAsset()
+    if type(writefile) ~= "function" or type(getcustomasset) ~= "function" then
+        return false, "writefile / getcustomasset not available"
+    end
+
+    local ok, result = pcall(function()
+        if not isfile(FONT_ID) then
+            local bytes = game:HttpGet(FONT_URL)
+            if not bytes or #bytes < 100 then
+                error("Downloaded font is empty")
+            end
+            writefile(FONT_ID, bytes)
+        end
+        local asset = getcustomasset(FONT_ID)
+        return Font.new(asset, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    end)
+
+    if ok and result then
+        LoadedFont = result
+        FontMethod = "getcustomasset"
+        return true, nil
+    end
+    return false, tostring(result)
+end
 
 local function LoadFonts()
-    local ok, err = pcall(function()
-        -- RegisterFont is the executor-provided function used by many script hubs.
-        if type(RegisterFont) ~= "function" then
-            error("RegisterFont not available in this environment")
-        end
-
-        local Verdana = RegisterFont("Verdana", 400, "Normal", {
-            Id   = "Verdana.ttf",
-            Font = game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/fs-tahoma-8px.ttf"),
-        })
-
-        if not Verdana then
-            error("RegisterFont returned nil")
-        end
-
-        LoadedFont = Font.new(Verdana, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-    end)
-    if not ok then
-        warn("[Celestite] RegisterFont failed, using fallback: " .. tostring(err))
+    -- Preferred path: RegisterFont (works in Wave, Solara, etc.)
+    local ok, err = TryRegisterFont()
+    if ok then
+        print("[Celestite] Font loaded via RegisterFont")
+        return
     end
+    warn("[Celestite] RegisterFont path failed: " .. tostring(err))
+
+    -- Fallback: download .ttf to workspace and load via getcustomasset
+    ok, err = TryCustomAsset()
+    if ok then
+        print("[Celestite] Font loaded via getcustomasset")
+        return
+    end
+    warn("[Celestite] getcustomasset path failed: " .. tostring(err))
+
+    -- Last resort: Roblox's built-in pixel-ish monospace
+    warn("[Celestite] Using Enum.Font.Code as final fallback")
+    FontMethod = "Enum.Font.Code"
 end
 LoadFonts()
 
