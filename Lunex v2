@@ -1,10 +1,10 @@
 --[[
-    Celestite UI Library - V2.11 (Full, Easing + Ripple)
-    • Proggy-only pixel font
-    • Smooth tween easing when dragging sliders
-    • Smooth tween easing when picking colors (SV pad, hue, indicator)
-    • Accent-colored ripple wave on every button click
-    • Locked full-fill tabs, TP/Spectate buttons, popup cleanup
+    Celestite UI Library - V2.11.1 (Full)
+    • FIX: Tween() now auto-plays again — tab underline, notifications,
+      button flashes, toggle colours all animate correctly
+    • Ripple wave on button clicks (accent-coloured)
+    • Smooth easing on sliders + color pickers
+    • Proggy-only pixel font, locked full-fill tabs, TP/Spectate, popup cleanup
 ]]
 
 local Players      = game:GetService("Players")
@@ -21,12 +21,18 @@ local Library = { Config = { Font = "Proggy", FontSize = 12 } }
 -------------------------------------------------
 -- UTILITIES
 -------------------------------------------------
+-- Auto-plays AND returns the tween so both styles work:
+--     Tween(obj, props)              -- fires
+--     Tween(obj, props):Play()       -- also fires (restarts, harmless)
+--     Tween(obj, props).Completed... -- still works
 local function Tween(obj, props, time, style, dir)
-    return TweenService:Create(
+    local t = TweenService:Create(
         obj,
         TweenInfo.new(time or 0.15, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out),
         props
     )
+    t:Play()
+    return t
 end
 
 local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -342,13 +348,8 @@ local function ApplyCelestiteStyle(inst)
 end
 
 -------------------------------------------------
--- RIPPLE EFFECT (accent-colored wave on click)
+-- RIPPLE EFFECT
 -------------------------------------------------
---[[
-    Spawns a circular frame at the click point inside `parent`, then tweens
-    it outward and fades it out. Uses the current Library.Theme.Accent so it
-    stays in sync with the accent color changer.
-]]
 local function SpawnRipple(parent, input)
     if not parent or not parent.Parent then return end
 
@@ -357,7 +358,6 @@ local function SpawnRipple(parent, input)
     local clickX = (input.Position.X - absPos.X)
     local clickY = (input.Position.Y - absPos.Y)
 
-    -- Make sure the parent clips the ripple to its own bounds
     local prevClip = parent.ClipsDescendants
     parent.ClipsDescendants = true
 
@@ -376,7 +376,6 @@ local function SpawnRipple(parent, input)
     corner.CornerRadius = UDim.new(1, 0)
     corner.Parent = Ripple
 
-    -- Expand to fully cover the parent regardless of click location
     local maxDim = math.max(absSz.X, absSz.Y) * 2.6
     local target = UDim2.fromOffset(maxDim, maxDim)
 
@@ -388,12 +387,8 @@ local function SpawnRipple(parent, input)
     tw:Play()
 
     tw.Completed:Connect(function()
-        if Ripple and Ripple.Parent then
-            Ripple:Destroy()
-        end
-        if parent and parent.Parent then
-            parent.ClipsDescendants = prevClip
-        end
+        if Ripple and Ripple.Parent then Ripple:Destroy() end
+        if parent and parent.Parent then parent.ClipsDescendants = prevClip end
     end)
 end
 
@@ -606,6 +601,7 @@ function Library:Window(title, size)
             TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         })
 
+        -- The underline that grows across the active tab
         local TabAccent = Create("Frame", {
             Name = "Accent",
             Size = UDim2.new(0, 0, 0, 1),
@@ -666,11 +662,19 @@ function Library:Window(title, size)
             for _, t in pairs(Window.Tabs) do
                 t.Page.Visible = false
                 Tween(t.Button, { TextColor3 = Library.Theme.InactiveText })
-                Tween(t.Accent, { Size = UDim2.new(0, 0, 0, 1), Position = UDim2.new(0.5, 0, 0.5, 8) })
+                -- collapse the underline back to a zero-width segment centred
+                Tween(t.Accent, {
+                    Size     = UDim2.new(0, 0, 0, 1),
+                    Position = UDim2.new(0.5, 0, 0.5, 8)
+                })
             end
             TabPage.Visible = true
             Tween(TabButton, { TextColor3 = Library.Theme.Text })
-            Tween(TabAccent, { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0.5, 8) })
+            -- grow the underline from left → full width
+            Tween(TabAccent, {
+                Size     = UDim2.new(1, 0, 0, 1),
+                Position = UDim2.new(0, 0, 0.5, 8)
+            })
         end
 
         TabButton.MouseButton1Click:Connect(Activate)
@@ -763,32 +767,25 @@ function Library:Window(title, size)
             Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = ElementList })
             Create("UIPadding", { PaddingBottom = UDim.new(0, fill and 0 or 9), Parent = ElementList })
 
-            --=================================================================
-            -- BUTTON  (with accent-colored ripple wave on click)
-            --=================================================================
             function Section:Button(bopts)
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Box = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Library.Theme.Background, ZIndex = 7, Parent = Holder })
                 ApplyCelestiteStyle(Box)
-                -- Ripple needs clipping so the expanding circle stays inside the button
                 Box.ClipsDescendants = true
 
                 local Label = Create("TextLabel", { Text = bopts.Name or "Button", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, FontFace = true, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 12, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 table.insert(Library.Elements.Buttons, Box)
 
-                -- Low-z click layer so the ripple (which sits above it) is visible
                 local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 11, Parent = Box })
 
                 btn.MouseButton1Click:Connect(function()
-                    -- Color pulse on the button itself
-                    Tween(Box, { BackgroundColor3 = Color3.fromRGB(45, 45, 45) }, 0.1):Play()
+                    Tween(Box, { BackgroundColor3 = Color3.fromRGB(45, 45, 45) }, 0.1)
                     task.wait(0.1)
-                    Tween(Box, { BackgroundColor3 = Library.Theme.SectionBackground }, 0.1):Play()
+                    Tween(Box, { BackgroundColor3 = Library.Theme.SectionBackground }, 0.1)
                     if bopts.Callback then bopts.Callback() end
                 end)
 
-                -- Ripple is spawned on InputBegan so it feels instant
                 btn.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                         SpawnRipple(Box, input)
@@ -812,9 +809,6 @@ function Library:Window(title, size)
                 return Obj
             end
 
-            --=================================================================
-            -- COLOR PICKER  (smooth tween easing on markers + SV pad)
-            --=================================================================
             function Section:ColorPicker(copts)
                 local h, s, v = 0, 1, 1
                 local color = copts.Default or Color3.fromHSV(h, s, v)
@@ -874,15 +868,14 @@ function Library:Window(title, size)
                     end
                 end)
 
-                -- Smooth-tween move for both markers
                 local function tweenMarker(marker, targetPos)
-                    Tween(marker, { Position = targetPos }, 0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out):Play()
+                    Tween(marker, { Position = targetPos }, 0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
                 end
 
                 local function Set(col)
                     h, s, v = col:ToHSV()
-                    Tween(CPHolder, { BackgroundColor3 = col }, 0.15):Play()
-                    Tween(SVBox, { BackgroundColor3 = Color3.fromHSV(h, 1, 1) }, 0.15):Play()
+                    Tween(CPHolder, { BackgroundColor3 = col }, 0.15)
+                    Tween(SVBox, { BackgroundColor3 = Color3.fromHSV(h, 1, 1) }, 0.15)
                     tweenMarker(Marker, UDim2.new(s, -2, 1 - v, -2))
                     tweenMarker(HueMarker, UDim2.new(0, -2, h, 0))
                     if copts.Callback then copts.Callback(col) end
@@ -906,7 +899,7 @@ function Library:Window(title, size)
                         elseif sH then
                             h = math.clamp((i.Position.Y - HueSlider.AbsolutePosition.Y) / HueSlider.AbsoluteSize.Y, 0, 1)
                             tweenMarker(HueMarker, UDim2.new(0, -2, h, 0))
-                            Tween(SVBox, { BackgroundColor3 = Color3.fromHSV(h, 1, 1) }, 0.08):Play()
+                            Tween(SVBox, { BackgroundColor3 = Color3.fromHSV(h, 1, 1) }, 0.08)
                             CPHolder.BackgroundColor3 = Color3.fromHSV(h, s, v)
                             if copts.Callback then copts.Callback(Color3.fromHSV(h, s, v)) end
                         end
@@ -927,8 +920,8 @@ function Library:Window(title, size)
 
                 local function Set(v)
                     state = v
-                    Tween(Box, { BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground }):Play()
-                    Tween(Label, { TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText }):Play()
+                    Tween(Box, { BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground })
+                    Tween(Label, { TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText })
                     if topts.Callback then topts.Callback(state) end
                 end
                 local function ToggleState()
@@ -1023,14 +1016,14 @@ function Library:Window(title, size)
                     end)
 
                     local function tweenMarker(marker, targetPos)
-                        Tween(marker, { Position = targetPos }, 0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out):Play()
+                        Tween(marker, { Position = targetPos }, 0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
                     end
 
                     local sS, sH = false, false
                     local function Update()
                         color = Color3.fromHSV(h, s, v)
-                        Tween(CPHolder, { BackgroundColor3 = color }, 0.15):Play()
-                        Tween(SVBox, { BackgroundColor3 = Color3.fromHSV(h, 1, 1) }, 0.15):Play()
+                        Tween(CPHolder, { BackgroundColor3 = color }, 0.15)
+                        Tween(SVBox, { BackgroundColor3 = Color3.fromHSV(h, 1, 1) }, 0.15)
                         if copts.Callback then copts.Callback(color) end
                     end
                     local function IsPointerInput2(t) return t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch end
@@ -1059,9 +1052,6 @@ function Library:Window(title, size)
                 return ToggleObj
             end
 
-            --=================================================================
-            -- SLIDER  (smooth tween easing on the fill while dragging)
-            --=================================================================
             function Section:Slider(sopts)
                 local min, max = sopts.Min, sopts.Max
                 local val = sopts.Default or min
@@ -1077,9 +1067,8 @@ function Library:Window(title, size)
                 table.insert(Library.Elements.Sliders, { Fill = SliderFill, Label = Label, Value = Value, Back = SliderBack })
                 local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", TextTransparency = 1, ZIndex = 10, Parent = SliderBack })
 
-                -- Smooth fill tween — short easing time so it stays responsive
                 local function tweenFill(pct)
-                    Tween(SliderFill, { Size = UDim2.new(pct, 0, 1, 0) }, 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out):Play()
+                    Tween(SliderFill, { Size = UDim2.new(pct, 0, 1, 0) }, 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
                 end
 
                 local function update(input)
@@ -1352,7 +1341,6 @@ function Library:Window(title, size)
                         TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
                     })
                     table.insert(Library.Elements.Buttons, Btn)
-                    -- Ripple on the action button too
                     Btn.InputBegan:Connect(function(input)
                         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                             SpawnRipple(Btn, input)
