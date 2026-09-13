@@ -1,9 +1,9 @@
 --[[
-    Celestite UI Library - V2.12 (Full)
-    • NEW: "Elisium"-style toggle button — dark box + accent top stripe + centered label
-    • Title top-left, bottom bar with Welcome + game name
-    • Left-aligned scrollable tab columns, editable sliders, animated dropdowns,
-      ripple on buttons, Proggy font, locked full-fill tabs, TP/Spectate
+    Celestite UI Library - V2.13 (Full)
+    • Smaller Elisium toggle button (110×36)
+    • Notifications on the RIGHT side, auto-width, proper layering
+    • Left-aligned scrollable tab columns, editable sliders, animated dropdowns
+    • Ripple on buttons, Proggy font, locked full-fill tabs, TP/Spectate
 ]]
 
 local Players      = game:GetService("Players")
@@ -11,6 +11,7 @@ local UIS          = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui      = game:GetService("CoreGui")
 local HttpService  = game:GetService("HttpService")
+local TextService  = game:GetService("TextService")
 
 local Library = { Config = { Font = "Proggy", FontSize = 12 } }
 
@@ -211,7 +212,6 @@ Library.Elements = {
     PlayerListActionBtns = {},
     BottomBarWelcomes = {}, BottomBarGames = {},
     TabScrolls = {},
-    -- NEW: toggle button registries
     ToggleBtns = {}, ToggleBtnStripes = {}, ToggleBtnLabels = {},
 }
 Library.Flags = {}
@@ -279,7 +279,6 @@ function Library:UpdateTheme()
         end
     end
 
-    -- NEW: toggle button theme hooks
     for _, btn in pairs(Library.Elements.ToggleBtns) do
         if btn.Parent then btn.BackgroundColor3 = Library.Theme.Background end
     end
@@ -406,18 +405,22 @@ end
 Library.SpawnRipple = SpawnRipple
 
 -------------------------------------------------
--- NOTIFICATIONS
+-- NOTIFICATIONS  (right side, auto-width, proper layering)
 -------------------------------------------------
 local NotifHolder = Instance.new("Frame")
 NotifHolder.Name = "NotifHolder"
-NotifHolder.Size = UDim2.new(0, 250, 1, -40)
-NotifHolder.Position = UDim2.new(0, 10, 0, 10)
+NotifHolder.Size = UDim2.new(0, 340, 1, -40)
+NotifHolder.Position = UDim2.new(1, -350, 0, 20)   -- anchored to the right
 NotifHolder.BackgroundTransparency = 1
+NotifHolder.ClipsDescendants = false
+NotifHolder.ZIndex = 1000
 NotifHolder.Parent = ScreenGui
 
 local NotifList = Instance.new("UIListLayout")
 NotifList.Padding = UDim.new(0, 5)
 NotifList.SortOrder = Enum.SortOrder.LayoutOrder
+NotifList.HorizontalAlignment = Enum.HorizontalAlignment.Right
+NotifList.VerticalAlignment = Enum.VerticalAlignment.Top
 NotifList.Parent = NotifHolder
 
 function Library:Notification(opts)
@@ -425,42 +428,83 @@ function Library:Notification(opts)
     local text     = opts.Text or "Notification"
     local duration = opts.Duration or 5
 
+    -- Auto-compute width from the actual text
+    local bounds = TextService:GetTextSize(
+        text,
+        Library.Config.FontSize,
+        Enum.Font.Code,
+        Vector2.new(500, 100)
+    )
+    local padLeft  = 12
+    local padRight = 12
+    local accentW  = 3
+    local width  = math.clamp(math.ceil(bounds.X) + padLeft + padRight + accentW + 8, 80, 320)
+    local height = 26
+
+    -- Row: keeps UIListLayout stacking working; the inner holder animates freely
+    local Row = Instance.new("Frame")
+    Row.Name = "NotifRow"
+    Row.Size = UDim2.new(1, 0, 0, height)
+    Row.BackgroundTransparency = 1
+    Row.ZIndex = 1000
+    Row.Parent = NotifHolder
+
+    -- Actual notification (slides in from offscreen right)
     local Holder = Instance.new("Frame")
-    Holder.Size = UDim2.new(1, 0, 0, 24)
+    Holder.Name = "Notif"
+    Holder.AnchorPoint = Vector2.new(1, 0)
+    Holder.Position = UDim2.new(1, width + 24, 0, 0)  -- fully offscreen
+    Holder.Size = UDim2.fromOffset(width, height)
     Holder.BackgroundColor3 = Library.Theme.DarkBackground
     Holder.BorderSizePixel = 0
-    Holder.Parent = NotifHolder
-    Holder.Position = UDim2.new(-1.2, 0, 0, 0)
+    Holder.ClipsDescendants = false
+    Holder.ZIndex = 1000
+    Holder.Parent = Row
 
     AddOutline(Holder)
     AddInlineOutline(Holder)
 
     local Accent = Instance.new("Frame")
-    Accent.Size = UDim2.new(0, 2, 1, 0)
+    Accent.Size = UDim2.new(0, accentW, 1, 0)
     Accent.BackgroundColor3 = Library.Theme.Accent
     Accent.BorderSizePixel = 0
-    Accent.ZIndex = 5
+    Accent.ZIndex = 1002
     Accent.Parent = Holder
 
     local TLabel = Instance.new("TextLabel")
     TLabel.Text = text
-    TLabel.Size = UDim2.new(1, -15, 1, 0)
-    TLabel.Position = UDim2.new(0, 10, 0, 0)
+    TLabel.Size = UDim2.new(1, -(accentW + padLeft + padRight), 1, 0)
+    TLabel.Position = UDim2.new(0, accentW + padLeft, 0, 0)
     TLabel.BackgroundTransparency = 1
     TLabel.TextColor3 = Library.Theme.Text
     TLabel.FontFace = GetFont()
     TLabel.TextSize = Library.Config.FontSize
     TLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TLabel.Parent = Holder
+    TLabel.TextYAlignment = Enum.TextYAlignment.Center
     TLabel.TextStrokeTransparency = 0
     TLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    TLabel.ZIndex = 5
+    TLabel.ZIndex = 1003
+    TLabel.Parent = Holder
 
-    Tween(Holder, {Position = UDim2.new(0, 0, 0, 0)}, 0.3)
+    -- Slide in from the right
+    TweenService:Create(
+        Holder,
+        TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        { Position = UDim2.new(1, 0, 0, 0) }
+    ):Play()
+
+    -- Slide out to the right and destroy
     task.delay(duration, function()
-        Tween(Holder, {Position = UDim2.new(-1.2, 0, 0, 0)}, 0.3)
-        task.wait(0.3)
-        Holder:Destroy()
+        if not Row or not Row.Parent then return end
+        local outTween = TweenService:Create(
+            Holder,
+            TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+            { Position = UDim2.new(1, width + 24, 0, 0) }
+        )
+        outTween:Play()
+        outTween.Completed:Connect(function()
+            if Row and Row.Parent then Row:Destroy() end
+        end)
     end)
 end
 
@@ -1785,13 +1829,12 @@ function Library:Window(title, size)
     task.delay(0.2, function() Library:UpdateTheme() end)
 
     --=============================================================
-    -- "ELISIUM" STYLE TOGGLE BUTTON
-    --   Dark rectangular box, accent stripe at the top, centered label
+    -- ELISIUM STYLE TOGGLE BUTTON (compact: 110×36)
     --=============================================================
     local ToggleBtn = Create("TextButton", {
         Name = "ToggleUIButton",
         Text = "",
-        Size = UDim2.new(0, 150, 0, 62),
+        Size = UDim2.new(0, 110, 0, 36),
         Position = UDim2.new(0, 20, 0, 20),
         BackgroundColor3 = Library.Theme.Background,
         AutoButtonColor = false,
@@ -1802,10 +1845,9 @@ function Library:Window(title, size)
     ApplyCelestiteStyle(ToggleBtn)
     table.insert(Library.Elements.ToggleBtns, ToggleBtn)
 
-    -- Accent stripe across the top
     local ToggleStripe = Create("Frame", {
         Name = "Stripe",
-        Size = UDim2.new(1, -6, 0, 3),
+        Size = UDim2.new(1, -6, 0, 2),
         Position = UDim2.new(0, 3, 0, 3),
         BackgroundColor3 = Library.Theme.Accent,
         BorderSizePixel = 0,
@@ -1814,15 +1856,14 @@ function Library:Window(title, size)
     })
     table.insert(Library.Elements.ToggleBtnStripes, ToggleStripe)
 
-    -- Centered label
     local ToggleLabel = Create("TextLabel", {
         Name = "Label",
         Text = "Elisium",
         Size = UDim2.new(1, 0, 1, -8),
-        Position = UDim2.new(0, 0, 0, 8),
+        Position = UDim2.new(0, 0, 0, 6),
         BackgroundTransparency = 1,
         FontFace = true,
-        TextSize = 22,
+        TextSize = 16,
         TextColor3 = Library.Theme.Text,
         TextXAlignment = Enum.TextXAlignment.Center,
         TextYAlignment = Enum.TextYAlignment.Center,
@@ -1842,7 +1883,6 @@ function Library:Window(title, size)
         if not uiVisible then Library:CloseAllPopups() end
     end)
 
-    -- Public API to relabel the toggle button
     function Window:SetToggleButtonText(str)
         if ToggleLabel and ToggleLabel.Parent then
             ToggleLabel.Text = tostring(str)
