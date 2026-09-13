@@ -1,719 +1,733 @@
--- ---------------------------------------------------------------------------
--- LIBRARY SUMMARY
--- ---------------------------------------------------------------------------
--- Lunex ships as a single file. It creates:
---   • A draggable window
---   • Tabs across the top
---   • Left / Right / Full columns inside each tab
---   • Sections (groupboxes) that hold elements
---   • Elements: Toggle, Slider, Dropdown, MultiDropdown, TextBox, Button,
---     Label, Divider, ColorPicker, Keybind, PlayerList
---   • Built-in Config and Theme editors (Tab:Configs / Tab:Themes)
---   • Notifications, watermark, and a floating show/hide button
---
--- LIBRARY FLAGS
--- ---------------------------------------------------------------------------
--- Any element you create with a `Flag = "name"` is automatically registered
--- in Library.Flags, which lets you read/write it programmatically later:
---   Library.Flags["name"]:Set(value)
---   Library.Flags["name"]:Get()
---
--- This mirrors the Linoria "Toggles.X" / "Options.X" pattern.
--- ---------------------------------------------------------------------------
+--[[
+	yo so this is my setup for Lunex
+	i've been using this lib for a bit now and honestly it's the cleanest one
+	i've touched in a while. figured i'd write out a full example with the way
+	i actually use it, not the sterile "docs" version.
 
--- loadstring + HttpGet fetches the raw library file and runs it.
--- The file returns a single table we name `Library`.
+	fair warning: i ramble. skip to the tabs if you just want code.
 
-local Library = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/1svxz/Lunex-UI/refs/heads/main/Lunex%20v2"
+	the way i build scripts: i create every UI element FIRST, get them looking
+	right, and only THEN wire up the logic. sounds backwards but it saves me
+	from chasing bugs in two places at once. you'll see me do that below.
+]]
+
+-- grab the lib. swap the url for whatever you're hosting it on
+local Lunex = loadstring(game:HttpGet(
+	"https://raw.githubusercontent.com/1svxz/Lunex-UI/refs/heads/main/Lunex%20v2"
 ))()
 
+-- standard services. nothing fancy
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Lighting   = game:GetService("Lighting")
 local UIS        = game:GetService("UserInputService")
 local LP         = Players.LocalPlayer
 
 --[[
-    Every config file is written as plaintext .cfg inside this folder.
-    Default is "lunex". Set it BEFORE creating the window so all config
-    tabs use the right path.
-
-    Library:SetConfigFolder("MyHub")   -- all configs go here
-    Library:GetConfigFolder()          -- "MyHub"
-    Library:GetConfigPath()            -- "MyHub/"
+	before you make the window, set the config folder. everything
+	gets saved as plaintext .cfg files in here.
+	default is "lunex", but u can rename it to ur liking.
 ]]
-Library:SetConfigFolder("MyHub")
+Lunex:SetConfigFolder("Lunex")
 
+
+--=================================================================
+-- WINDOW
+--=================================================================
 --[[
-    Window:CreateWindow(title, size?)
+	Lunex:Window(title) — that's it. just a title.
+	there's an optional second arg for size but honestly the default
+	620x460 is fine unless you're cramming a ton of stuff in.
 
-      title — text in the top-left title bar
-      size  — UDim2, optional. Defaults to 620×460.
-
-    Unlike some libraries, Lunex does NOT take a table of options here.
-    Just pass title and (optionally) size.
+	i see people add 20 pixels "for breathing room" and then complain
+	the window is too big. just use the default.
 ]]
-local Window = Library:Window("Lunex Example")
+local Window = Lunex:Window("Lunex  |  demo")
 
+
+--=================================================================
+-- THE FLOATING BITS (watermark, toggle button, notifs)
+--=================================================================
 --[[
-    These methods live on the Window object and configure the floating UI
-    that is not part of any tab.
+	these three things are the little quality-of-life touches that
+	make a hub feel "finished" instead of "some script i found":
 
-    • SetWatermarkText(str)     — top-right watermark (auto-resizes to fit)
-    • SetWatermarkVisible(bool) — show/hide the watermark
-    • SetToggleButtonText(str)  — label of the floating show/hide button
-    • SetGameName(str)          — bottom-bar game name (auto-fetched otherwise)
+	1. the watermark in the top right — that passive info thing
+	2. the toggle button in the top left — shows/hides the whole menu
+	3. notifications — those little toasts for feedback
 
-    Notifications:
-      Library:Notification({ Text = "...", Duration = 5 })
-      Toast in the top-right that auto-dismisses after `Duration` seconds.
+	i always turn all three on. players expect them at this point.
 ]]
-Window:SetWatermarkText("Lunex  •  Example")
+
+-- watermark. auto-sizes to whatever text you give it
+Window:SetWatermarkText("Lunex  |  demo")
 Window:SetWatermarkVisible(true)
-Window:SetToggleButtonText("Menu")
-Window:SetGameName("My Game")
 
--- Show a welcome toast
-Library:Notification({ Text = "Lunex loaded", Duration = 4 })
+-- floating toggle. click it to hide/show everything
+-- (yes it's draggable, yes that's cool)
+Window:SetToggleButtonText("UI Toggle")
 
+-- overrides the game name shown in the bottom bar
+-- (normally it fetches the place name automatically, but sometimes
+--  you're on a private server and it says "Loading..." forever)
+Window:SetGameName("Demo Place")
+
+-- first notification. feels good to greet the user, y'know?
+Lunex:Notification({ Text = "Loaded. Have fun.", Duration = 4 })
+
+
+--=================================================================
+-- TABS
+--=================================================================
 --[[
-    Every Tab exposes three columns:
+	here's the thing about tabs that took me a while to internalize:
 
-        "Left"   → 50% width, left half
-        "Right"  → 50% width, right half
-        "Full"   → 100% width, spans both
+	every tab has THREE columns — Left, Right, Full.
 
-    ⚠️  RULE: Never mix "Full" with "Left"/"Right" in the SAME tab.
-              "Full" overlaps both columns → visible broken UI.
+	- Left  and Right are 50% wide each. use them when you want
+	  two vertical stacks of controls side by side.
+	- Full  is 100% wide. use it for player lists or anything big.
 
-    ✅  CORRECT:
-        Tab A: Section("A", "Left") + Section("B", "Right")
-        Tab B: Section("Wide", "Full")
-        Tab C: Tab:Configs("Full")            (own tab)
-        Tab D: Tab:Themes("Full")             (own tab)
+	THE RULE (and i've broken this so many times):
+	don't mix Full with Left/Right in the SAME tab.
+	Full sits on top of the other two and you get a visual mess.
 
-    ❌  WRONG:
-        Tab X: Left + Right + Full in the same tab
+	Left + Right? fine.
+	Just Full? fine.
+	Left + Right + Full? broken.
+	Simple.
+
+	i usually split mine like this:
+	  Main       — Left + Right (combat / movement)
+	  Visuals    — Left + Right (world / player ESP)
+	  Players    — Full (the player list)
+	  Configs    — Full (own tab, config-only)
+	  Theme      — Full (own tab, theme-only)
 ]]
 
+local MainTab    = Window:Tab("Main")
+local VisualsTab = Window:Tab("Visuals")
+local PlayersTab = Window:Tab("Players")
+local ConfigTab  = Window:Tab("Configs")
+local ThemeTab   = Window:Tab("Theme")
+
+
+--=================================================================
+-- MAIN TAB
+--=================================================================
 --[[
-    Window:Tab(name) → returns a Tab object.
+	i split the main tab into two columns:
+	  Left  = combat stuff
+	  Right = movement stuff
 
-    The first tab you create is automatically activated. Tab activation
-    closes any open dropdowns/popups and animates the accent underline.
+	Side-by-side feels balanced. also lets players tweak both without
+	scrolling forever.
 ]]
-local MainTab = Window:Tab("Main")
-local UITab   = Window:Tab("UI Settings")
+
+-- ── LEFT: combat ──
+local Combat = MainTab:Section("Combat", "Left")
 
 --[[
-    Tab:Section(name, side, opts?)
+	TOGGLE. the bread and butter.
+	  Name     — the label
+	  Default  — false by default (obviously pass true if you want it on)
+	  Flag     — the KEY it registers under in Library.Flags
+	  Callback — fires every time the state flips
 
-      name — header text drawn at the top of the section
-      side — "Left" | "Right" | "Full"
-      opts — { Fill = bool }   (Full sections default to Fill = true)
+	i usually leave Callback out during the "build the UI" phase and
+	add it later. keeps things tidy.
 
-    A "Full" section locks the tab — no further sections can be added to it.
-    Everything you can do in one Section, you can do in any other.
+	pro tip: always give your toggles a Flag. even if you think you
+	won't need to control it from code, you will. every time.
 ]]
-local LeftGroupBox  = MainTab:Section("Groupbox", "Left")
-local RightGroupBox = MainTab:Section("Groupbox #3", "Right")
+Combat:Toggle({
+	Name = "Aimbot",
+	Default = false,
+	Flag = "aimbotEnabled",
+	Callback = function(state)
+		print("[aimbot]", state and "on" or "off")
+	end,
+}):Keybind({ Default = Enum.KeyCode.X })
 
 --[[
-    Section:Toggle(opts)
+	:Keybind() chains onto a toggle and adds a little box on the right
+	you click the box, press a key, done. clicking the box again with
+	"esc" clears it.
 
-      opts = {
-        Name     = string,          -- label text (REQUIRED)
-        Default  = boolean,         -- initial state (default false)
-        Flag     = string,          -- key in Library.Flags
-        Callback = function(bool),  -- fires every time the state changes
-      }
-
-    Returns a Toggle object with:
-      :Get()         → current state
-      :GetState()    → alias for Get
-      :Set(bool)     → change the state (fires Callback)
-
-    CHAINABLE:
-      :Keybind({...})     → attach a keybind box on the right
-      :ColorPicker({...}) → attach a color swatch on the right (chainable)
+	by default pressing the bound key just toggles the parent toggle.
+	you can override that with OnTrigger if you want custom behavior.
+	i rarely do. the default is what i want 95% of the time.
 ]]
-local MyToggle = LeftGroupBox:Toggle({
-    Name = "This is a toggle",
-    Default = true,
-    Flag = "MyToggle",
-    Callback = function(state)
-        print("[cb] MyToggle changed to:", state)
-    end,
+
+Combat:Toggle({
+	Name = "Silent Aim",
+	Default = false,
+	Flag = "silentAim",
+}):Keybind({ Default = Enum.KeyCode.Q })
+
+--[[
+	CHAINING. :Keybind() returns the toggle itself, so you can chain
+	more methods right after it. and :ColorPicker() does the same.
+
+	this next one has a keybind AND a color picker AND is still just
+	one toggle. the picker shows up next to the keybind box.
+]]
+Combat:Toggle({
+	Name = "Hit Marker",
+	Default = false,
+	Flag = "hitMarker",
+})
+	:Keybind({ Default = Enum.KeyCode.H })
+	:ColorPicker({
+		Default = Color3.fromRGB(255, 80, 80),
+		Callback = function(c) print("[hit marker color]", c) end,
+	})
+
+--[[
+	you can ALSO attach two or more color pickers if you want a gradient
+	style thing (say, tracer start color + tracer end color). they stack
+	left-to-right on the right side of the row.
+]]
+Combat:Toggle({
+	Name = "Team Colors",
+	Default = false,
+	Flag = "teamColors",
+})
+	:ColorPicker({ Default = Color3.fromRGB(80, 140, 255) })  -- team A
+	:ColorPicker({ Default = Color3.fromRGB(255, 80, 80) })   -- team B
+
+--[[
+	SLIDER.
+	  Min / Max — required
+	  Default   — defaults to Min if you skip it
+
+	the number to the right is an editable text box. click it, type
+	a value, press enter — that's a way better UX than draggable-only.
+
+	watch out: sliders floor to integers. if you need decimals, scale
+	your values (0-100 mapped to 0.0-1.0 or whatever).
+]]
+Combat:Slider({
+	Name = "FOV Radius",
+	Min = 0, Max = 720, Default = 120,
+	Flag = "fov",
+	Callback = function(v) print("[fov]", v) end,
+})
+
+-- ── RIGHT: movement ──
+local Movement = MainTab:Section("Movement", "Right")
+
+Movement:Toggle({
+	Name = "Speed Hack",
+	Default = false,
+	Flag = "speedHack",
+}):Keybind({ Default = Enum.KeyCode.LeftShift })
+
+Movement:Slider({
+	Name = "Walk Speed",
+	Min = 16, Max = 250, Default = 32,
+	Flag = "walkspeed",
 })
 
 --[[
-    RECOMMENDED PATTERN: decouple UI creation from logic.
-
-    The Callback above fires immediately when the toggle is created AND
-    whenever it changes. If you want the "logic" to live elsewhere, leave
-    Callback out of the initial table and read the state after:
-
-        Library.Flags.MyToggle:Get()
-
-    Or poll it from a loop. There is no :OnChanged method (unlike Linoria),
-    so if you want event-driven logic you should use the Callback.
+	guess what, sliders can be side-by-side with toggles, labels,
+	whatever. the section just stacks them vertically with tiny
+	4px gaps. you don't need to think about it.
 ]]
+Movement:Slider({
+	Name = "Jump Power",
+	Min = 50, Max = 500, Default = 100,
+	Flag = "jumppower",
+})
 
--- Programmatically flip the toggle from anywhere:
-Library.Flags.MyToggle:Set(false)
--- → Callback fires with `false`
+Movement:Toggle({
+	Name = "Infinite Jump",
+	Default = false,
+	Flag = "infJump",
+}):Keybind({ Default = Enum.KeyCode.Space })
+
+Movement:Toggle({
+	Name = "Fly",
+	Default = false,
+	Flag = "fly",
+}):Keybind({ Default = Enum.KeyCode.F })
+
+Movement:Slider({
+	Name = "Fly Speed",
+	Min = 10, Max = 300, Default = 80,
+	Flag = "flySpeed",
+})
+
+
+--=================================================================
+-- VISUALS TAB
+--=================================================================
+local Visuals = VisualsTab:Section("World", "Left")
 
 --[[
-    Attaching :Keybind() adds a small 3-layer keybind box to the right of
-    the toggle row. Click the box, then press a key to rebind.
+	DIVIDER. just a line.
+	look, sometimes a section has a "theme change" and you want a
+	visual break. that's what this is for.
 
-    opts = {
-      Default   = Enum.KeyCode,     -- initial key
-      Callback  = function(key),    -- fires when the user rebinds
-      OnTrigger = function(),       -- overrides the default "toggle state"
-                                    -- behavior — if you leave it out, pressing
-                                    -- the key flips the toggle
-    }
+	you can customize the color and thickness, i usually leave them
+	default. subtle is good.
 ]]
-LeftGroupBox:Toggle({
-    Name = "Speed Hack",
-    Default = false,
-    Flag = "SpeedHack",
-}):Keybind({
-    Default = Enum.KeyCode.LeftShift,
-    Callback = function(key) print("Speed Hack rebound to:", key.Name) end,
+Visuals:Divider()
+
+Visuals:Toggle({
+	Name = "Fullbright",
+	Default = false,
+	Flag = "fullbright",
+	Callback = function(state)
+		Lighting.Brightness    = state and 3 or 2
+		Lighting.ClockTime     = state and 14 or 15
+		Lighting.GlobalShadows = not state
+	end,
+}):Keybind({ Default = Enum.KeyCode.B })
+
+Visuals:Toggle({
+	Name = "Remove Fog",
+	Default = false,
+	Flag = "noFog",
+	Callback = function(state)
+		Lighting.FogEnd = state and 1e5 or 1000
+	end,
+})
+
+Visuals:Divider({ Spacing = 12, Thickness = 2, Color = Color3.fromRGB(255, 100, 100) })
+
+--[[
+	STANDALONE COLOR PICKER. no toggle attached.
+	just a labeled row with a swatch. use this when you've got a
+	color setting that isn't tied to an on/off.
+]]
+Visuals:ColorPicker({
+	Name = "Ambient Color",
+	Default = Color3.fromRGB(128, 128, 128),
+	Flag = "ambient",
+	Callback = function(c) Lighting.Ambient = c end,
+})
+
+-- ── RIGHT: player ESP ──
+local ESP = VisualsTab:Section("Player ESP", "Right")
+
+ESP:Toggle({ Name = "Box ESP",     Default = false, Flag = "boxESP" })
+	:ColorPicker({ Default = Color3.fromRGB(0, 255, 100) })
+
+ESP:Toggle({ Name = "Name Tags",   Default = false, Flag = "nameTags" })
+	:ColorPicker({ Default = Color3.fromRGB(255, 255, 255) })
+
+ESP:Toggle({ Name = "Health Bars", Default = false, Flag = "healthBars" })
+
+ESP:Toggle({ Name = "Tracers",     Default = false, Flag = "tracers" })
+	:ColorPicker({ Default = Color3.fromRGB(255, 100, 100) })
+
+ESP:Slider({
+	Name = "Max Distance",
+	Min = 50, Max = 5000, Default = 1500,
+	Flag = "espDistance",
 })
 
 --[[
-    The default OnTrigger is: toggle the parent toggle's state. So pressing
-    the bound key flips Speed Hack on/off. You can override OnTrigger if you
-    want the key to do something else instead.
+	MULTI-DROPDOWN.
+	looks and behaves like a normal dropdown EXCEPT:
+	  - clicking an option toggles it (the list stays open)
+	  - you can select multiple
+	  - selected items are tinted with the accent color
+
+	the value label shows the first 2 selected, then "(+N)" for the rest.
+	so 5 selections shows as "Enemies, NPCs (+3)".
+
+	honestly the best use for these is a "what do you want to target"
+	picker. way better than a row of checkboxes.
 ]]
-
---[[
-    Attaching :ColorPicker() adds a small color swatch on the right of the
-    toggle row. Clicking the swatch opens a floating HSV picker.
-
-    opts = {
-      Default  = Color3,
-      Flag     = string,
-      Callback = function(Color3),
-    }
-
-    Returns the toggle (still chainable).
-]]
-LeftGroupBox:Toggle({
-    Name = "ESP Highlight",
-    Default = false,
-    Flag = "ESPHighlight",
-}):ColorPicker({
-    Default = Color3.fromRGB(255, 60, 60),
-    Callback = function(c) print("Highlight color:", c) end,
+ESP:MultiDropdown({
+	Name = "Show For",
+	Options = { "Enemies", "Teammates", "Friends", "Local Player", "Staff" },
+	Default = { "Enemies", "Teammates" },
+	Flag = "showFor",
+	Callback = function(list)
+		print("[show for]", table.concat(list, ", "))
+	end,
 })
 
 --[[
-    Because :ColorPicker() and :Keybind() both return the toggle, you can
-    chain them freely. Order matters — they stack left-to-right on the right
-    side of the toggle row.
+	SINGLE DROPDOWN. classic.
+	click an option, it selects, dropdown closes, done.
 
-    Multiple color pickers are useful for gradient / two-color features.
+	if you need to update the option list at runtime (say, when a new
+	player joins the game), use :Refresh() on the flag later. see the
+	"flags" section at the bottom.
 ]]
-LeftGroupBox:Toggle({
-    Name = "Team Colors",
-    Default = false,
-    Flag = "TeamColors",
-})
-    :ColorPicker({ Default = Color3.fromRGB(60, 120, 255) })
-    :ColorPicker({ Default = Color3.fromRGB(255, 60, 60)  })
-    :Keybind({ Default = Enum.KeyCode.T })
-
---[[
-    Section:Slider(opts)
-
-      opts = {
-        Name     = string,
-        Min      = number,        -- required
-        Max      = number,        -- required
-        Default  = number,        -- defaults to Min
-        Flag     = string,
-        Callback = function(number),
-      }
-
-    The number at the right is an editable TextBox — click it, type a value,
-    press Enter to set the slider directly.
-
-    Methods:
-      :Get() → current value
-      :Set(number)
-]]
-LeftGroupBox:Slider({
-    Name = "This is my slider",
-    Min = 0, Max = 5, Default = 0,
-    Flag = "MySlider",
-    Callback = function(v) print("[cb] Slider:", v) end,
+ESP:Dropdown({
+	Name = "Text Style",
+	Options = { "Plain", "Outlined", "Shadowed", "Glowing" },
+	Default = "Outlined",
+	Flag = "textStyle",
 })
 
--- Read programmatically:
-local sliderValue = Library.Flags.MySlider:Get()
-print("Slider value at read time:", sliderValue)
 
--- Set programmatically:
-Library.Flags.MySlider:Set(3)
+--=================================================================
+-- PLAYERS TAB
+--=================================================================
+--[[
+	PLAYER LIST. this is Full-width only. it's the one element where
+	"Left" or "Right" would make it unreadable, so always own tab.
+]]
+local PLSection = PlayersTab:Section("Player List", "Full")
 
 --[[
-    Section:TextBox(opts)
+	the player list has a bottom detail panel showing the selected
+	player's info (avatar, user id, display name, account age) with
+	TP and Spectate buttons.
 
-      opts = {
-        Name        = string,
-        Default     = string,
-        Placeholder = string,
-        Flag        = string,
-        Callback    = function(text),   -- fires on FocusLost (Enter / click away)
-      }
+	you hook those buttons up via callbacks:
+	  OnTeleport(player)     — called when TP clicked
+	  OnSpectate(player, on) — called when Spectate toggled
 
-    Methods:
-      :GetText()        → current text
-      :SetText(str)
-      :Set(str)         → alias
+	i always check for the target's HumanoidRootPart before doing
+	CFrame stuff, otherwise you get errors when they're dead or
+	still loading in.
 ]]
-local MyTextbox = LeftGroupBox:TextBox({
-    Name = "This is a textbox",
-    Default = "My textbox!",
-    Placeholder = "Placeholder text",
-    Flag = "MyTextbox",
-    Callback = function(v) print("[cb] Text updated:", v) end,
+PLSection:PlayerList({
+	ShowDistance = true,     -- show "123m" next to each name
+	RefreshRate  = 0.5,      -- refresh every half second
+	Height       = 400,
+	DetailHeight = 100,
+
+	OnTeleport = function(target)
+		local myHrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+		local tHrp  = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+		if myHrp and tHrp then
+			myHrp.CFrame = tHrp.CFrame * CFrame.new(0, 0, 3)
+			Lunex:Notification({ Text = "TP'd to " .. target.Name, Duration = 2 })
+		end
+	end,
+
+	OnSpectate = function(target, state)
+		Lunex:Notification({
+			Text = (state and "Watching " or "Stopped watching ") .. target.Name,
+			Duration = 2,
+		})
+	end,
 })
 
-MyTextbox:SetText("Hello world")
-print("Text now:", MyTextbox:GetText())
+
+--=================================================================
+-- INPUTS / LABELS SHOWCASE
+--=================================================================
+--[[
+	i'm adding this as its own tab so you can SEE every input type
+	in one place. in a real hub you'd sprinkle these through their
+	relevant tabs, obviously.
+]]
+local InputsTab = Window:Tab("Inputs")
+
+-- ── LEFT: text inputs and buttons ──
+local TextStuff = InputsTab:Section("Text & Buttons", "Left")
 
 --[[
-    Section:Dropdown(opts)
-
-      opts = {
-        Name     = string,
-        Options  = { string, ... },
-        Default  = string,           -- pre-selected (defaults to Options[1])
-        Flag     = string,
-        Callback = function(string),
-        OnOpen   = function(),       -- fires BEFORE the dropdown opens
-                                      -- useful for refreshing Options on the fly
-      }
-
-    Methods:
-      :Get()               → currently-selected string
-      :Set(string)         → change selection
-      :Refresh({...})      → replace the option list
+	TEXT BOX. fires Callback when you click away or press enter.
+	the :GetText() method lets you read the value at any time.
 ]]
-LeftGroupBox:Dropdown({
-    Name = "A dropdown",
-    Options = { "This", "is", "a", "dropdown" },
-    Default = "This",
-    Flag = "MyDropdown",
-    Callback = function(v) print("[cb] Dropdown:", v) end,
+local nameBox = TextStuff:TextBox({
+	Name = "Your Name",
+	Default = "",
+	Placeholder = "type here...",
+	Flag = "userName",
+	Callback = function(text) print("[name]", text) end,
 })
 
--- Change via flag:
-Library.Flags.MyDropdown:Set("dropdown")
-
--- Refresh the option list from elsewhere:
-Library.Flags.MyDropdown:Refresh({ "New", "Options", "Here" })
-
---[[
-    Section:MultiDropdown(opts)
-
-      opts = {
-        Name     = string,
-        Options  = { string, ... },
-        Default  = { string, ... },   -- array of pre-selected options
-        Flag     = string,
-        Callback = function(list),    -- receives array of currently-selected
-        OnOpen   = function(),
-      }
-
-    Behaves like Dropdown but:
-      • clicking an option TOGGLES it (dropdown stays open)
-      • selected options show in the accent color
-      • the value label shows:
-          "A, B" for ≤2 selected
-          "A, B (+N)" for more
-
-    Methods:
-      :Get()            → array of currently-selected
-      :Set({...})       → replace selection
-      :Toggle(opt)      → flip one option
-      :IsSelected(opt)  → boolean
-      :Refresh({...})   → replace the option list
-]]
-LeftGroupBox:MultiDropdown({
-    Name = "A multi dropdown",
-    Options = { "This", "is", "a", "dropdown" },
-    Default = { "This", "is" },
-    Flag = "MyMultiDropdown",
-    Callback = function(list)
-        print("[cb] Multi dropdown:", table.concat(list, ", "))
-    end,
-})
-
--- Programmatic use:
-Library.Flags.MyMultiDropdown:Set({ "This", "a" })
-Library.Flags.MyMultiDropdown:Toggle("dropdown")
-print("Is 'This' selected?", Library.Flags.MyMultiDropdown:IsSelected("This"))
-
---[[
-    Section:ColorPicker(opts)
-
-      opts = {
-        Name     = string,
-        Default  = Color3,
-        Flag     = string,
-        Callback = function(Color3),
-      }
-
-    Renders a labeled row with a color swatch on the right. Click the swatch
-    to open a floating HSV picker.
-
-    Methods:
-      :Get() → Color3
-      :Set(Color3)
-]]
-LeftGroupBox:ColorPicker({
-    Name = "Some color",
-    Default = Color3.fromRGB(0, 255, 0),
-    Flag = "ColorPicker",
-    Callback = function(v) print("[cb] Color changed:", v) end,
-})
-
--- Programmatic:
-Library.Flags.ColorPicker:Set(Color3.fromRGB(0, 255, 140))
-
---[[
-    Section:Label(opts)
-
-      opts = {
-        Name     = string,
-        Center   = boolean,   -- center-align instead of left
-        Color    = Color3,    -- text color (defaults to Theme.Text)
-        Height   = number,    -- row height (default 16)
-        Flag     = string,
-      }
-
-    Methods:
-      :SetText(str)
-      :GetText()
-      :SetColor(Color3)
-
-    CHAINABLE:
-      :ColorPicker({...}) → labeled row + color swatch
-      :Keybind({...})     → labeled row + keybind box
-]]
-LeftGroupBox:Label({ Name = "This is a label" })
-
--- Centered + colored:
-LeftGroupBox:Label({
-    Name = "Centered colored label",
-    Center = true,
-    Color = Color3.fromRGB(255, 200, 100),
+TextStuff:Button({
+	Name = "Greet Me",
+	Callback = function()
+		local name = nameBox:GetText()
+		if name and name ~= "" then
+			Lunex:Notification({ Text = "hey " .. name .. "!", Duration = 3 })
+		else
+			Lunex:Notification({ Text = "enter a name first silly", Duration = 3 })
+		end
+	end,
 })
 
 --[[
-    Exactly like attaching a picker to a toggle, but the label takes the
-    place of the toggle. Useful for pure color settings with no on/off state.
+	BUTTON. one of the few elements that has no state. click, thing
+	happens. you get a click ripple for free.
 ]]
-LeftGroupBox:Label({ Name = "Color" }):ColorPicker({
-    Default = Color3.fromRGB(0, 255, 0),
-    Flag = "LabelColorPicker",
-    Callback = function(v) print("[cb] Label color:", v) end,
+TextStuff:Button({
+	Name = "Copy Job ID",
+	Callback = function()
+		if setclipboard then
+			setclipboard(tostring(game.JobId))
+			Lunex:Notification({ Text = "copied!", Duration = 2 })
+		end
+	end,
+})
+
+TextStuff:Divider()
+
+--[[
+	LABEL. static text.
+	honestly the most underrated element. useful for headers,
+	descriptions, section notes, etc.
+]]
+TextStuff:Label({ Name = "These are labels:" })
+TextStuff:Label({ Name = "Left-aligned (default)" })
+
+TextStuff:Label({
+	Name = "Centered with a custom color",
+	Center = true,
+	Color = Color3.fromRGB(200, 160, 255),
 })
 
 --[[
-    opts = {
-      Default   = Enum.KeyCode,
-      OnTrigger = function(),       -- overrides the default no-op
-      Callback  = function(key),    -- fires on rebind
-    }
-
-    Since a label has no state to toggle, the keybind does NOTHING by
-    default. You MUST provide OnTrigger if you want the key to do something.
+	LABEL + COLOR PICKER.
+	chained the same way as toggle + picker. when you've got a color
+	with no on/off state, this is the play.
 ]]
-LeftGroupBox:Label({ Name = "Keybind" }):Keybind({
-    Default = Enum.KeyCode.X,
-    OnTrigger = function()
-        Library:Notification({ Text = "X was pressed!", Duration = 2 })
-    end,
-    Callback = function(k) print("[cb] Keybind changed:", k.Name) end,
+TextStuff:Label({ Name = "Accent Color" }):ColorPicker({
+	Default = Color3.fromRGB(200, 68, 240),
+	Flag = "accentColor",
 })
 
 --[[
-    Section:Button(opts)
+	LABEL + KEYBIND.
+	unlike the toggle keybind, pressing the bound key does NOTHING by
+	default. labels have no state.
 
-      opts = {
-        Name     = string,
-        Callback = function(),
-      }
-
-    Every button gets a click-ripple animation automatically.
-
-    NOTE: Lunex does not support the "chained sub-buttons" pattern from
-    Linoria. Each button is standalone.
+	you MUST provide an OnTrigger function if you want the key to
+	actually do something.
 ]]
-LeftGroupBox:Button({
-    Name = "Button",
-    Callback = function()
-        print("You clicked a button!")
-    end,
+TextStuff:Label({ Name = "Panic Key" }):Keybind({
+	Default = Enum.KeyCode.P,
+	OnTrigger = function()
+		Lunex:Notification({ Text = "panic!", Duration = 2 })
+	end,
 })
 
---[[
-    Section:Divider(opts)
-
-      opts = {
-        Spacing   = number,   -- vertical padding around the line (default 8)
-        Thickness = number,   -- line thickness in pixels (default 1)
-        Color     = Color3,   -- override the inline color
-      }
-
-    Returns an object with:
-      :SetColor(Color3)
-      :SetVisible(bool)
-]]
-LeftGroupBox:Divider()
-LeftGroupBox:Divider({ Spacing = 12, Thickness = 2, Color = Color3.fromRGB(255, 80, 80) })
+-- ── RIGHT: programmatic stuff ──
+local Prog = InputsTab:Section("Programmatic", "Right")
 
 --[[
-    Lunex labels wrap their text. Combined with a tall Label and the
-    scrolling Section column, long labels just push other elements down
-    and the whole column scrolls.
+	here's the thing that trips people up:
+
+	Library.Flags[name] gives you a live reference to whatever element
+	you gave that Flag to. you can read or write its state from anywhere.
+
+	here's what each element exposes:
+	  Toggle:      :Get() → bool        :Set(bool)
+	  Slider:      :Get() → number      :Set(number)
+	  Dropdown:    :Get() → string      :Set(string)  :Refresh({...})
+	  MultiDrop:   :Get() → list        :Set(list)  :Toggle(opt)  :IsSelected(opt)
+	  ColorPicker: :Get() → Color3      :Set(Color3)
+	  TextBox:     :GetText() → string  :SetText(str)
+
+	that's IT. no OnChanged like Linoria has, so if you want reactive
+	logic you use the Callback at creation time. which is honestly
+	cleaner anyway.
 ]]
-LeftGroupBox:Label({
-    Name = "Oh no...\nThis label spans multiple lines!\n\nWe're gonna run out of UI space...\nJust kidding! Scroll down!\n\nHello from below!",
-    Height = 100,
+Prog:Button({
+	Name = "Force-enable Aimbot",
+	Callback = function()
+		Lunex.Flags["aimbotEnabled"]:Set(true)
+		Lunex:Notification({ Text = "aimbot forced on", Duration = 2 })
+	end,
 })
 
---[[
-    Section:PlayerList(opts)
-
-      opts = {
-        ShowDistance = boolean,   -- show "123m" next to names
-        RefreshRate  = number,    -- refresh interval in seconds
-        Height       = number,    -- total pixel height of the list
-        DetailHeight = number,    -- height of the bottom info panel
-        OnTeleport   = function(player),
-        OnSpectate   = function(player, state),
-      }
-
-    Layout:
-      ┌────────────────────────────┐
-      │ scrolling player rows      │
-      ├────────────────────────────┤
-      │ avatar | Id/Name/Age | TP  │
-      │        |             | Spec│
-      └────────────────────────────┘
-
-    Row click selects; TP/Spectate buttons act on the selection.
-]]
-local PlayerList = MainTab:Section("Player List", "Full")
-
-PlayerList:PlayerList({
-    ShowDistance = true,
-    RefreshRate  = 0.5,
-    Height       = 400,
-    DetailHeight = 100,
-    OnTeleport = function(target)
-        local myHrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-        local tHrp  = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-        if myHrp and tHrp then
-            myHrp.CFrame = tHrp.CFrame * CFrame.new(0, 0, 3)
-            Library:Notification({ Text = "TP → " .. target.Name, Duration = 2 })
-        end
-    end,
-    OnSpectate = function(target, state)
-        Library:Notification({
-            Text = (state and "Spectating " or "Stopped spectating ") .. target.Name,
-            Duration = 2,
-        })
-    end,
+Prog:Button({
+	Name = "Set FOV to 300",
+	Callback = function()
+		Lunex.Flags["fov"]:Set(300)
+	end,
 })
 
+Prog:Button({
+	Name = "Swap target list",
+	Callback = function()
+		-- you can replace a dropdown's option list on the fly
+		Lunex.Flags["textStyle"]:Refresh({ "Fancy", "Simple", "Minimal", "Loud" })
+		Lunex:Notification({ Text = "list refreshed", Duration = 2 })
+	end,
+})
+
+Prog:Button({
+	Name = "Randomize accent",
+	Callback = function()
+		Lunex.Flags["accentColor"]:Set(Color3.fromHSV(math.random(), 1, 1))
+	end,
+})
+
+
+--=================================================================
+-- CONFIGS + THEMES
+--=================================================================
 --[[
-    Tab:Configs(side, folder?)
+	i always give these their OWN tabs. here's why:
 
-      side   — "Left" | "Right" | "Full"    (use "Full" for a dedicated tab)
-      folder — optional override of the global folder
+	- Configs has a name box, a dropdown of saved files, and 3 buttons.
+	  That's a whole workflow. Mixing it with anything else feels cramped.
 
-    Provides:
-      • Config Name   → TextBox
-      • Saved Configs → Dropdown of existing .cfg files
-      • Save Config   → writes <folder>/<name>.cfg
-      • Load Config   → applies Theme + all Flags
-      • Delete Config → removes the file
+	- Themes has 9 color pickers. NINE. Give it its own space.
 
-    File format (plaintext, no JSON):
-      [Theme]
-      Accent = c:200,68,240
-      ...
-      [Flags]
-      MyToggle     = b:true
-      MySlider     = n:3
-      MyDropdown   = s:This
-      MyMulti      = t:This|is
+	both are "Full" width by default. if you want them side by side
+	in the SAME tab (Configs on left, Themes on right), you can pass
+	"Left" and "Right" to them. i usually don't, but it's a thing.
 ]]
-local ConfigTab = Window:Tab("Configs")
+
+--[[
+	CONFIGS.
+	each save writes a plaintext .cfg file with two sections:
+	  [Theme]  — every color in Library.Theme
+	  [Flags]  — every registered flag and its current value
+
+	the file is human-readable. you can open it in notepad and
+	hand-edit stuff if you want. here's what it looks like:
+
+	    # Lunex configuration
+	    # Name: PVP
+	    # Saved: 2025-01-15 14:22:01
+
+	    [Theme]
+	    Accent = c:200,68,240
+	    Background = c:16,16,16
+	    ...
+
+	    [Flags]
+	    aimbotEnabled = b:true
+	    fov           = n:120
+	    showFor       = t:Enemies|Teammates
+
+	the "c:" "b:" "n:" "s:" "t:" prefixes are type markers. c=color,
+	b=bool, n=number, s=string, t=table. you can hand-edit these but
+	be careful with the format — the loader is strict about it.
+]]
 ConfigTab:Configs("Full")
 
 --[[
-    Tab:Themes(side)
+	THEMES.
+	nine color pickers that update every element live. drag one and
+	watch the whole UI recolour in real time.
 
-    Creates 9 live color pickers that update every element instantly:
-      Accent | Background | DarkBackground | HeaderBar | Text
-      InactiveText | Outline | Inline | SectionBackground
+	the nine colors:
+	  Accent            — the purple (or whatever) highlights
+	  Background        — the main window body
+	  DarkBackground    — nested panels, dropdowns
+	  HeaderBar         — section header bars
+	  Text              — primary text
+	  InactiveText      — greyed-out text
+	  Outline           — the 1px outer border
+	  Inline            — the 1px inner border
+	  SectionBackground — slider tracks, toggle boxes
 
-    Changes are applied to Library.Theme and broadcast via Library:UpdateTheme(),
-    so every registered element is refreshed immediately.
+	if you want to really customize things, poke at these. the default
+	theme is fine but sometimes you want a pink hub. no judgment.
 ]]
-local ThemeTab = Window:Tab("Theme")
 ThemeTab:Themes("Full")
 
--- Or combine both in one tab using Left + Right (no "Full"):
--- UITab:Configs("Left")
--- UITab:Themes("Right")
 
+--=================================================================
+-- REAL LOGIC (tying flags to actual behavior)
+--=================================================================
 --[[
-    Every element with a Flag is registered in Library.Flags.
+	ok so this is the part that matters. the UI gives you the controls,
+	but YOU have to make them do things.
 
-    ┌─────────────────┬───────────────────────┬─────────────────────────┐
-    │ Element         │ Getter                │ Setter                  │
-    ├─────────────────┼───────────────────────┼─────────────────────────┤
-    │ Toggle          │ :Get() / :GetState()  │ :Set(bool)              │
-    │ Slider          │ :Get()                │ :Set(number)            │
-    │ Dropdown        │ :Get()                │ :Set(string)            │
-    │                 │                       │ :Refresh({...})         │
-    │ MultiDropdown   │ :Get() → list         │ :Set({...})             │
-    │                 │ :IsSelected(opt)      │ :Toggle(opt)            │
-    │ ColorPicker     │ :Get() → Color3       │ :Set(Color3)            │
-    │ TextBox         │ :GetText()            │ :SetText(str)           │
-    │ Label           │ :GetText()            │ :SetText(str)           │
-    └─────────────────┴───────────────────────┴─────────────────────────┘
+	trick i use: override the flag's Set method. here's how.
 
-    Note: unlike Linoria's "Options.X:OnChanged(fn)" pattern, Lunex does NOT
-    expose an OnChanged method. Use the Callback provided at creation time.
+	when the library creates a toggle, it stores a "Set" function in
+	Library.Flags[name]. every click from the UI calls that function.
+
+	if i REPLACE that function with my own, now both UI clicks AND
+	programmatic :Set() calls run my code. clean.
 ]]
-task.spawn(function()
-    task.wait(3)
-    Library.Flags.MyToggle:Set(true)
+local flyConnection, flyBodyVelocity, flyBodyGyro
 
-    task.wait(3)
-    Library.Flags.MySlider:Set(4)
+Lunex.Flags["fly"].Set = function(state)
+	-- always clean up first, otherwise you leak connections
+	if flyConnection then flyConnection:Disconnect(); flyConnection = nil end
+	if flyBodyVelocity then flyBodyVelocity:Destroy(); flyBodyVelocity = nil end
+	if flyBodyGyro     then flyBodyGyro:Destroy();     flyBodyGyro     = nil end
 
-    task.wait(3)
-    Library.Flags.MyDropdown:Refresh({ "Refreshed", "Options", "Now" })
+	local char = LP.Character
+	local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
 
-    task.wait(3)
-    Library.Flags.MyMultiDropdown:Set({ "This", "dropdown" })
+	if state then
+		flyBodyVelocity = Instance.new("BodyVelocity")
+		flyBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+		flyBodyVelocity.Velocity = Vector3.zero
+		flyBodyVelocity.Parent   = hrp
 
-    task.wait(3)
-    Library.Flags.ColorPicker:Set(Color3.fromRGB(200, 68, 240))
-end)
+		flyBodyGyro = Instance.new("BodyGyro")
+		flyBodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+		flyBodyGyro.P = 1000
+		flyBodyGyro.Parent = hrp
 
---[[
-    The library gives you the UI. YOU decide what happens when a flag
-    changes. Here's how to override a flag's Set method so it drives real
-    game code — this works because the UI still calls the same Set method
-    internally when the toggle is clicked.
+		flyConnection = RunService.Heartbeat:Connect(function()
+			local cam  = workspace.CurrentCamera
+			local move = Vector3.zero
+			local speed = Lunex.Flags["flySpeed"]:Get()
 
-    The pattern: replace Library.Flags.<name>.Set with your own function.
-    From now on, both UI clicks AND programmatic :Set(value) calls will
-    trigger your logic.
-]]
-local flyConn, flyVel, flyGyro
+			-- WASD relative to camera direction. the standard fly setup
+			if UIS:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
+			if UIS:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
+			if UIS:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+			if UIS:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
 
-Library.Flags.Fly = Library.Flags.Fly or {}
-Library.Flags.Fly.Set = function(state)
-    if flyConn then flyConn:Disconnect(); flyConn = nil end
-    if flyVel  then flyVel:Destroy(); flyVel = nil end
-    if flyGyro then flyGyro:Destroy(); flyGyro = nil end
-
-    local char = LP.Character
-    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    if state then
-        flyVel = Instance.new("BodyVelocity")
-        flyVel.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        flyVel.Velocity = Vector3.zero
-        flyVel.Parent   = hrp
-
-        flyGyro = Instance.new("BodyGyro")
-        flyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-        flyGyro.P = 1000
-        flyGyro.Parent = hrp
-
-        flyConn = RunService.Heartbeat:Connect(function()
-            local cam  = workspace.CurrentCamera
-            local move = Vector3.zero
-
-            if UIS:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
-
-            if move.Magnitude > 0 then move = move.Unit end
-            flyVel.Velocity = move * 80
-            flyGyro.CFrame  = cam.CFrame
-        end)
-    end
+			if move.Magnitude > 0 then move = move.Unit end
+			flyBodyVelocity.Velocity = move * speed
+			flyBodyGyro.CFrame = cam.CFrame
+		end)
+	end
 end
 
 --[[
-    Typical "UI Settings" tab mirrors the Linoria example:
-      • Menu bind       (keybind to hide/show the window)
-      • Unload button   (tears down everything)
-      • Config section  (Save / Load / Delete)
-      • Theme section   (color pickers)
+	and here's the same trick for infinite jump. different approach
+	here — I'm hooking the JumpRequest event instead of overriding a
+	flag's Set method. this one is simpler because I don't need to
+	clean up physics objects.
 ]]
-local MenuGroup = UITab:Section("Menu", "Left")
+local jumpConn
 
-MenuGroup:Button({
-    Name = "Unload",
-    Callback = function()
-        -- Tear down your own connections first
-        if flyConn then flyConn:Disconnect(); flyConn = nil end
-        if flyVel  then flyVel:Destroy();  flyVel  = nil end
-        if flyGyro then flyGyro:Destroy(); flyGyro = nil end
+Lunex.Flags["infJump"].Set = function(state)
+	if jumpConn then jumpConn:Disconnect(); jumpConn = nil end
+	if state then
+		jumpConn = UIS.JumpRequest:Connect(function()
+			local char = LP.Character
+			local hum  = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end)
+	end
+end
 
-        -- Then destroy the Lunex screen gui
-        if Library.ScreenGui then Library.ScreenGui:Destroy() end
-        print("Lunex unloaded")
-    end,
-})
 
-MenuGroup:Label({ Name = "Menu bind" }):Keybind({
-    Default = Enum.KeyCode.End,
-    OnTrigger = function()
-        -- Toggle the window visibility on/off
-        Library.ScreenGui.Enabled = not Library.ScreenGui.Enabled
-    end,
-})
-
--- Config + Theme side by side on the right
-UITab:Configs("Right")
-
+--=================================================================
+-- FINAL NOTES
+--=================================================================
 --[[
-    The watermark's width auto-sizes to its text, but if you want to
-    refresh it periodically (e.g. to include FPS / ping), just call
-    SetWatermarkText again — it will smoothly re-tween.
+	few things i learned the hard way:
+
+	1. ALWAYS give toggles/sliders/dropdowns a Flag. every one. even
+	   if you don't need it now, you'll want to config-save it later.
+
+	2. Never mix Full sections with Left/Right in the same tab. i know
+	   i've said this three times. i mean it.
+
+	3. When you override a flag's Set (like I did for fly), make sure
+	   you clean up connections first. leaking connections is how
+	   scripts die in the middle of a session.
+
+	4. The config system saves EVERY flag that's registered. If you're
+	   testing something and want it excluded, don't give it a Flag.
+
+	5. Notifications should be SHORT. "Loaded!" not "The script has
+	   finished loading and is ready for use". nobody reads those.
 ]]
-local frameTimer, frameCounter = tick(), 0
-local fps = 60
 
-local WatermarkConn = RunService.RenderStepped:Connect(function()
-    frameCounter = frameCounter + 1
-    if tick() - frameTimer >= 1 then
-        fps = frameCounter
-        frameTimer = tick()
-        frameCounter = 0
-    end
+Lunex:Notification({ Text = "All set. F for fly.", Duration = 5 })
 
-    local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-    Window:SetWatermarkText(("Lunex  •  %d fps  •  %d ms"):format(fps, ping))
-end)
+print("[myhub] loaded")
+print("[myhub] config folder: " .. Lunex:GetConfigFolder())
+print("[myhub] tabs: main, visuals, players, inputs, configs, theme")
