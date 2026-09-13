@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.20 (Full)
+    Celestite UI Library - V2.21 (Full)
     • Font: Enum.Font.SourceSansBold (built-in, no downloads)
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
@@ -11,17 +11,18 @@
     • V2.19: Added Divider, Label (+ColorPicker / +Keybind), MultiDropdown
     • V2.20: Dropdowns close on tab switch, snap-update on drag,
              MultiDropdown styled like single Dropdown (no checkboxes)
+    • V2.21: Config folder is now configurable via Library:SetConfigFolder
+             Configs use a plaintext .cfg format (no JSON dependency)
 ]]
 
 local Players      = game:GetService("Players")
 local UIS          = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui      = game:GetService("CoreGui")
-local HttpService  = game:GetService("HttpService")
 local TextService  = game:GetService("TextService")
 local RunService   = game:GetService("RunService")
 
-local Library = { Config = { FontSize = 14 } }
+local Library = { Config = { FontSize = 14, ConfigFolder = "celestite" } }
 
 -------------------------------------------------
 -- FONT (built-in SourceSansBold)
@@ -187,6 +188,119 @@ Library.Elements = {
 }
 Library.Flags = {}
 Library.OpenPopups = {}
+
+-- ─── Config folder helpers ───
+function Library:SetConfigFolder(name)
+    name = tostring(name or "celestite")
+    name = name:gsub("[^%w_%-%. ]", ""):gsub("%s+", "_")
+    if name == "" then name = "celestite" end
+    self.Config.ConfigFolder = name
+end
+
+function Library:GetConfigFolder()
+    return self.Config.ConfigFolder or "celestite"
+end
+
+function Library:GetConfigPath()
+    return self:GetConfigFolder() .. "/"
+end
+
+-- ─── Config value (de)serialization (plaintext, no JSON) ───
+local function SerializeValue(v)
+    local t = typeof(v)
+    if t == "boolean" then
+        return "b:" .. tostring(v)
+    elseif t == "number" then
+        return "n:" .. tostring(v)
+    elseif t == "string" then
+        return "s:" .. v
+    elseif t == "Color3" then
+        return string.format("c:%d,%d,%d",
+            math.floor(v.R * 255 + 0.5),
+            math.floor(v.G * 255 + 0.5),
+            math.floor(v.B * 255 + 0.5))
+    elseif t == "table" then
+        local parts = {}
+        for _, item in ipairs(v) do parts[#parts + 1] = tostring(item) end
+        return "t:" .. table.concat(parts, "|")
+    end
+    return "s:" .. tostring(v)
+end
+
+local function DeserializeValue(s)
+    if type(s) ~= "string" then return nil end
+    local prefix = s:sub(1, 2)
+    local body = s:sub(3)
+    if prefix == "b:" then
+        return body == "true"
+    elseif prefix == "n:" then
+        return tonumber(body) or 0
+    elseif prefix == "s:" then
+        return body
+    elseif prefix == "c:" then
+        local r, g, b = body:match("(%d+),(%d+),(%d+)")
+        if r and g and b then
+            return Color3.fromRGB(tonumber(r), tonumber(g), tonumber(b))
+        end
+        return Color3.new()
+    elseif prefix == "t:" then
+        local list = {}
+        for part in body:gmatch("([^|]*)") do
+            if part ~= "" then list[#list + 1] = part end
+        end
+        return list
+    end
+    return s
+end
+
+function Library:WriteConfigFile(name, data)
+    local path = self:GetConfigPath() .. tostring(name) .. ".cfg"
+    local lines = {}
+    lines[#lines + 1] = "# Celestite configuration"
+    lines[#lines + 1] = "# Name: " .. tostring(name)
+    lines[#lines + 1] = "# Saved: " .. os.date("%Y-%m-%d %H:%M:%S")
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "[Theme]"
+    for k, v in pairs(data.Theme or {}) do
+        lines[#lines + 1] = k .. " = " .. SerializeValue(v)
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "[Flags]"
+    for k, v in pairs(data.Flags or {}) do
+        if v ~= nil then
+            lines[#lines + 1] = k .. " = " .. SerializeValue(v)
+        end
+    end
+    local ok = pcall(function()
+        writefile(path, table.concat(lines, "\n"))
+    end)
+    return ok
+end
+
+function Library:ReadConfigFile(name)
+    local path = self:GetConfigPath() .. tostring(name) .. ".cfg"
+    local content
+    local ok = pcall(function() content = readfile(path) end)
+    if not ok or not content then return nil end
+
+    local data = { Theme = {}, Flags = {} }
+    local section = nil
+    for line in content:gmatch("[^\r\n]+") do
+        local trimmed = line:match("^%s*(.-)%s*$")
+        if trimmed ~= "" and not trimmed:match("^#") then
+            local secName = trimmed:match("^%[(.+)%]$")
+            if secName then
+                section = secName
+            else
+                local key, val = trimmed:match("^(.-)%s*=%s*(.*)$")
+                if key and val and section and (section == "Theme" or section == "Flags") then
+                    data[section][key] = DeserializeValue(val)
+                end
+            end
+        end
+    end
+    return data
+end
 
 function Library:RegisterPopup(fn)  table.insert(self.OpenPopups, fn) end
 function Library:CloseAllPopups()
@@ -770,7 +884,6 @@ function Library:Window(title, size)
         Tab._locked = false
 
         local function Activate()
-            -- ✦ FIX: close any open dropdowns / popups when switching tabs
             Library:CloseAllPopups()
 
             for _, t in pairs(Window.Tabs) do
@@ -1345,7 +1458,7 @@ function Library:Window(title, size)
                 local currentListHeight = 0
                 local dropOpen = false
                 local openTween, closeTween
-                local trackConn   -- ✦ FIX: RenderStepped tracker (no lag on drag)
+                local trackConn
 
                 local function StartTrack()
                     if trackConn then trackConn:Disconnect() end
@@ -1467,7 +1580,7 @@ function Library:Window(title, size)
                         Arrow.Text = "^"
                         Arrow.Position = UDim2.new(1, -20, 0, 2)
 
-                        StartTrack()  -- ✦ snap-tracks the button position every frame
+                        StartTrack()
                     end)
                 end
 
@@ -1510,9 +1623,6 @@ function Library:Window(title, size)
                 return Obj
             end
 
-            -------------------------------------------------
-            -- DIVIDER
-            -------------------------------------------------
             function Section:Divider(dopts)
                 dopts = dopts or {}
                 local Holder = Create("Frame", {
@@ -1533,9 +1643,6 @@ function Library:Window(title, size)
                 }
             end
 
-            -------------------------------------------------
-            -- LABEL (+ :ColorPicker / :Keybind)
-            -------------------------------------------------
             function Section:Label(lopts)
                 lopts = lopts or {}
 
@@ -1817,9 +1924,6 @@ function Library:Window(title, size)
                 return LabelObj
             end
 
-            -------------------------------------------------
-            -- MULTI DROPDOWN  (styled like single Dropdown)
-            -------------------------------------------------
             function Section:MultiDropdown(mopts)
                 mopts = mopts or {}
                 local options = mopts.Options or {}
@@ -1977,8 +2081,6 @@ function Library:Window(title, size)
                     if mopts.Callback then mopts.Callback(GetSelectedList()) end
                 end
 
-                -- ✦ Options styled EXACTLY like single-dropdown: plain text rows,
-                --   accent color when selected. Clicking toggles selection.
                 local function UpdateList(new)
                     if new then options = new; mopts.Options = new end
                     OptionHolder:ClearAllChildren()
@@ -2406,9 +2508,9 @@ function Library:Window(title, size)
             return ThemeSection
         end
 
-        function Tab:Configs(side)
+        function Tab:Configs(side, folderName)
             local ConfigSection = Tab:Section("Configuration", side or "Left")
-            local ConfigPath = "celestite/"
+            local ConfigPath = (folderName or Library:GetConfigFolder()) .. "/"
             if not isfolder(ConfigPath) then makefolder(ConfigPath) end
 
             local ConfigName = ""
@@ -2421,7 +2523,7 @@ function Library:Window(title, size)
                     local files = listfiles(ConfigPath)
                     for _, file in pairs(files) do
                         local name = file:match("([^/\\]+)$") or file
-                        name = name:gsub("%.json$", ""):gsub("%.JSON$", "")
+                        name = name:gsub("%.cfg$", ""):gsub("%.CFG$", "")
                         names[#names + 1] = name
                     end
                 end)
@@ -2435,15 +2537,21 @@ function Library:Window(title, size)
                 local nameToSave = NameBox.GetText()
                 if nameToSave == nil or nameToSave == "" then return end
                 local data = { Theme = {}, Flags = {} }
-                for k, v in pairs(Library.Theme) do data.Theme[k] = {v.R * 255, v.G * 255, v.B * 255} end
-                for k, v in pairs(Library.Flags) do
-                    local val = (v.Get and v.Get()) or (v.GetState and v.GetState()) or (v.GetText and v.GetText())
-                    if typeof(val) == "Color3" then val = {val.R * 255, val.G * 255, val.B * 255} end
-                    data.Flags[k] = val
+                for k, v in pairs(Library.Theme) do
+                    if typeof(v) == "Color3" then data.Theme[k] = v end
                 end
-                pcall(function()
-                    writefile(ConfigPath .. nameToSave .. ".json", HttpService:JSONEncode(data))
-                end)
+                for k, v in pairs(Library.Flags) do
+                    local val = (v.Get and v.Get())
+                        or (v.GetState and v.GetState())
+                        or (v.GetText and v.GetText())
+                    if val ~= nil then data.Flags[k] = val end
+                end
+                local ok = Library:WriteConfigFile(nameToSave, data)
+                if ok then
+                    Library:Notification({ Text = "Saved: " .. nameToSave, Duration = 2 })
+                else
+                    Library:Notification({ Text = "Save failed", Duration = 2 })
+                end
                 task.wait()
                 Refresh()
             end })
@@ -2451,30 +2559,28 @@ function Library:Window(title, size)
             ConfigSection:Button({ Name = "Load Config", Callback = function()
                 local selected = ConfigList:Get()
                 if not selected or selected == "" then return end
-                local path = ConfigPath .. selected .. ".json"
-                local success = pcall(function()
-                    local data = HttpService:JSONDecode(readfile(path))
-                    for k, v in pairs(data.Theme or {}) do
-                        if Library.Theme[k] then Library.Theme[k] = Color3.fromRGB(v[1], v[2], v[3]) end
-                    end
-                    Library:UpdateTheme()
-                    for k, v in pairs(data.Flags or {}) do
-                        if Library.Flags[k] then
-                            local val = v
-                            if type(val) == "table" and #val == 3 then val = Color3.fromRGB(val[1], val[2], val[3]) end
-                            Library.Flags[k].Set(val)
-                        end
-                    end
-                end)
-                if success then
-                    Library:Notification({ Text = "Loaded config: " .. selected, Duration = 3 })
+                local data = Library:ReadConfigFile(selected)
+                if not data then
+                    Library:Notification({ Text = "Failed to read config", Duration = 2 })
+                    return
                 end
+                for k, v in pairs(data.Theme or {}) do
+                    if Library.Theme[k] ~= nil then Library.Theme[k] = v end
+                end
+                Library:UpdateTheme()
+                for k, v in pairs(data.Flags or {}) do
+                    if Library.Flags[k] and Library.Flags[k].Set then
+                        Library.Flags[k].Set(v)
+                    end
+                end
+                Library:Notification({ Text = "Loaded: " .. selected, Duration = 3 })
             end })
 
             ConfigSection:Button({ Name = "Delete Config", Callback = function()
                 local selected = ConfigList:Get()
                 if not selected or selected == "" then return end
-                pcall(function() delfile(ConfigPath .. selected .. ".json") end)
+                pcall(function() delfile(ConfigPath .. selected .. ".cfg") end)
+                Library:Notification({ Text = "Deleted: " .. selected, Duration = 2 })
                 Refresh()
             end })
 
