@@ -1,3 +1,22 @@
+--[[
+    Lunex UI Library - V2.24 (Full)
+    • Font: Enum.Font.SourceSansBold (built-in, no downloads)
+    • Dropdown race-condition fix
+    • Auto-sizing toggle button (default "UI Toggle")
+    • Right-side auto-width notifications
+    • Left-aligned scrollable tab columns, editable sliders
+    • Ripple on buttons, locked full-fill tabs, TP/Spectate
+    • V2.18: 3-layer keybind box (Outline / DarkBackground / Inline stroke)
+    • V2.18: Watermark matching topbar design (accent line + inline outline)
+    • V2.19: Added Divider, Label (+ColorPicker / +Keybind), MultiDropdown
+    • V2.20: Dropdowns close on tab switch, snap-update on drag,
+             MultiDropdown styled like single Dropdown (no checkboxes)
+    • V2.21: Config folder configurable + .cfg plaintext format (no JSON)
+    • V2.22: Only one dropdown open at a time
+    • V2.23: Fixed saved-configs dropdown not listing files
+    • V2.24: Rebranded Celestite → Lunex, accent is #C844F0
+]]
+
 local Players      = game:GetService("Players")
 local UIS          = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -7,12 +26,18 @@ local RunService   = game:GetService("RunService")
 
 local Library = { Config = { FontSize = 14, ConfigFolder = "lunex" } }
 
+-------------------------------------------------
+-- FONT (built-in SourceSansBold)
+-------------------------------------------------
 local UI_FONT = Enum.Font.SourceSansBold
 
 local function GetFont()
     return UI_FONT
 end
 
+-------------------------------------------------
+-- UTILITIES
+-------------------------------------------------
 local function Tween(obj, props, time, style, dir)
     local t = TweenService:Create(
         obj,
@@ -80,6 +105,9 @@ local function MakeDraggable(frame, handle)
     end
 end
 
+-------------------------------------------------
+-- CORE
+-------------------------------------------------
 Library.Registry = {}
 Library.Keys = {
     ["Unknown"] = "Unknown",
@@ -137,7 +165,7 @@ end)
 Library.Theme = {
     Background        = Color3.fromRGB(16, 16, 16),
     DarkBackground    = Color3.fromRGB(12, 12, 12),
-    Accent            = Color3.fromRGB(200, 68, 240),
+    Accent            = Color3.fromRGB(200, 68, 240),   -- #C844F0
     Inline            = Color3.fromRGB(60, 60, 60),
     Outline           = Color3.fromRGB(5, 5, 5),
     Text              = Color3.fromRGB(255, 255, 255),
@@ -163,6 +191,7 @@ Library.Elements = {
 Library.Flags = {}
 Library.OpenPopups = {}
 
+-- ─── Config folder helpers ───
 function Library:SetConfigFolder(name)
     name = tostring(name or "lunex")
     name = name:gsub("[^%w_%-%. ]", ""):gsub("%s+", "_")
@@ -183,6 +212,7 @@ function Library:GetConfigPath()
     return folder .. "/"
 end
 
+-- ─── Config value (de)serialization (plaintext, no JSON) ───
 local function SerializeValue(v)
     local t = typeof(v)
     if t == "boolean" then
@@ -290,6 +320,7 @@ function Library:CloseAllPopups()
     for _, fn in ipairs(snap) do pcall(fn) end
 end
 
+-- ─── Currently-open dropdown tracker (only one can be open at a time) ───
 Library.CurrentDropdown = nil
 
 function Library:SetCurrentDropdown(closer)
@@ -478,6 +509,9 @@ local function ApplyLunexStyle(inst)
     AddInlineOutline(inst)
 end
 
+-------------------------------------------------
+-- RIPPLE
+-------------------------------------------------
 local function SpawnRipple(parent, input)
     if not parent or not parent.Parent then return end
     local absPos = parent.AbsolutePosition
@@ -515,6 +549,9 @@ local function SpawnRipple(parent, input)
 end
 Library.SpawnRipple = SpawnRipple
 
+-------------------------------------------------
+-- NOTIFICATIONS
+-------------------------------------------------
 local NotifHolder = Instance.new("Frame")
 NotifHolder.Name = "NotifHolder"
 NotifHolder.Size = UDim2.new(0, 340, 1, -40)
@@ -626,6 +663,9 @@ local function Create(class, props, children)
     return inst
 end
 
+-------------------------------------------------
+-- WINDOW
+-------------------------------------------------
 function Library:Window(title, size)
     local Window = { Tabs = {} }
 
@@ -2620,6 +2660,9 @@ function Library:Window(title, size)
 
     task.delay(0.2, function() Library:UpdateTheme() end)
 
+    --=============================================================
+    -- AUTO-SIZING TOGGLE BUTTON
+    --=============================================================
     local TOGGLE_LABEL_SIZE = 14
     local TOGGLE_LABEL_PAD  = 20
     local TOGGLE_HEIGHT     = 30
@@ -2698,6 +2741,9 @@ function Library:Window(title, size)
         end
     end
 
+    --=============================================================
+    -- WATERMARK (matches topbar design)
+    --=============================================================
     local WM_HEIGHT = 26
     local WM_PAD_H  = 12
 
