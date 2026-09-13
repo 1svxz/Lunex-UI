@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.23 (Full)
+    Lunex UI Library - V2.24 (Full)
     • Font: Enum.Font.SourceSansBold (built-in, no downloads)
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
@@ -14,12 +14,7 @@
     • V2.21: Config folder configurable + .cfg plaintext format (no JSON)
     • V2.22: Only one dropdown open at a time
     • V2.23: Fixed saved-configs dropdown not listing files
-             - folder is created immediately on SetConfigFolder
-             - listfiles uses folder name WITHOUT trailing slash
-             - filenames sanitized before write
-             - save/delete wait for disk flush before refresh
-             - .cfg extension filter
-             - errors surface via warn()
+    • V2.24: Rebranded Celestite → Lunex, accent is #C844F0
 ]]
 
 local Players      = game:GetService("Players")
@@ -29,7 +24,7 @@ local CoreGui      = game:GetService("CoreGui")
 local TextService  = game:GetService("TextService")
 local RunService   = game:GetService("RunService")
 
-local Library = { Config = { FontSize = 14, ConfigFolder = "celestite" } }
+local Library = { Config = { FontSize = 14, ConfigFolder = "lunex" } }
 
 -------------------------------------------------
 -- FONT (built-in SourceSansBold)
@@ -170,7 +165,7 @@ end)
 Library.Theme = {
     Background        = Color3.fromRGB(16, 16, 16),
     DarkBackground    = Color3.fromRGB(12, 12, 12),
-    Accent            = Color3.fromRGB(100, 140, 230),
+    Accent            = Color3.fromRGB(200, 68, 240),   -- #C844F0
     Inline            = Color3.fromRGB(60, 60, 60),
     Outline           = Color3.fromRGB(5, 5, 5),
     Text              = Color3.fromRGB(255, 255, 255),
@@ -198,19 +193,18 @@ Library.OpenPopups = {}
 
 -- ─── Config folder helpers ───
 function Library:SetConfigFolder(name)
-    name = tostring(name or "celestite")
+    name = tostring(name or "lunex")
     name = name:gsub("[^%w_%-%. ]", ""):gsub("%s+", "_")
-    name = name:gsub("[/\\]+$", "")       -- strip trailing slashes
-    if name == "" then name = "celestite" end
+    name = name:gsub("[/\\]+$", "")
+    if name == "" then name = "lunex" end
     self.Config.ConfigFolder = name
-    -- Create the folder immediately so save/list works without waiting
     pcall(function()
         if not isfolder(name) then makefolder(name) end
     end)
 end
 
 function Library:GetConfigFolder()
-    return self.Config.ConfigFolder or "celestite"
+    return self.Config.ConfigFolder or "lunex"
 end
 
 function Library:GetConfigPath()
@@ -269,7 +263,7 @@ end
 function Library:WriteConfigFile(name, data)
     local path = self:GetConfigPath() .. tostring(name) .. ".cfg"
     local lines = {}
-    lines[#lines + 1] = "# Celestite configuration"
+    lines[#lines + 1] = "# Lunex configuration"
     lines[#lines + 1] = "# Name: " .. tostring(name)
     lines[#lines + 1] = "# Saved: " .. os.date("%Y-%m-%d %H:%M:%S")
     lines[#lines + 1] = ""
@@ -287,7 +281,7 @@ function Library:WriteConfigFile(name, data)
     local ok, err = pcall(function()
         writefile(path, table.concat(lines, "\n"))
     end)
-    if not ok then warn("[Celestite] WriteConfigFile failed: " .. tostring(err)) end
+    if not ok then warn("[Lunex] WriteConfigFile failed: " .. tostring(err)) end
     return ok
 end
 
@@ -296,7 +290,7 @@ function Library:ReadConfigFile(name)
     local content
     local ok, err = pcall(function() content = readfile(path) end)
     if not ok or not content then
-        warn("[Celestite] ReadConfigFile failed: " .. tostring(err))
+        warn("[Lunex] ReadConfigFile failed: " .. tostring(err))
         return nil
     end
 
@@ -474,7 +468,7 @@ function Library:UpdateTheme()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "CelestiteUI"
+ScreenGui.Name = "LunexUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = (gethui and gethui()) or CoreGui
@@ -510,7 +504,7 @@ local function AddInlineOutline(inst)
     return inl
 end
 
-local function ApplyCelestiteStyle(inst)
+local function ApplyLunexStyle(inst)
     AddOutline(inst)
     AddInlineOutline(inst)
 end
@@ -676,7 +670,7 @@ function Library:Window(title, size)
     local Window = { Tabs = {} }
 
     local Main = Create("Frame", {
-        Name = "CelestiteWindow",
+        Name = "LunexWindow",
         Size = size or UDim2.new(0, 620, 0, 460),
         Position = UDim2.new(0.5, -310, 0.5, -230),
         BackgroundColor3 = Library.Theme.DarkBackground,
@@ -684,7 +678,7 @@ function Library:Window(title, size)
         Parent = ScreenGui,
         ClipsDescendants = false
     })
-    ApplyCelestiteStyle(Main)
+    ApplyLunexStyle(Main)
 
     local AccentLine = Create("Frame", {
         Name = "AccentLine",
@@ -709,7 +703,7 @@ function Library:Window(title, size)
 
     Create("TextLabel", {
         Name = "Title",
-        Text = title or "Celestite",
+        Text = title or "Lunex",
         Size = UDim2.new(0, 0, 1, 0),
         AutomaticSize = Enum.AutomaticSize.X,
         Position = UDim2.new(0, 8, 0, 0),
@@ -941,7 +935,7 @@ function Library:Window(title, size)
         function Tab:Section(sectionName, side, opts)
             opts = opts or {}
             if Tab._locked then
-                warn(("[Celestite] Tab '%s' is locked — cannot add section '%s'."):format(tostring(TabButton.Name), tostring(sectionName)))
+                warn(("[Lunex] Tab '%s' is locked — cannot add section '%s'."):format(tostring(TabButton.Name), tostring(sectionName)))
                 return nil
             end
 
@@ -966,7 +960,7 @@ function Library:Window(title, size)
                 BackgroundColor3 = Library.Theme.DarkBackground,
                 BorderSizePixel = 0, ZIndex = 4, Parent = parent, ClipsDescendants = false
             })
-            ApplyCelestiteStyle(SectionFrame)
+            ApplyLunexStyle(SectionFrame)
 
             local HeaderBar = Create("Frame", {
                 Name = "HeaderBar", Size = UDim2.new(1, -2, 0, 20),
@@ -1007,7 +1001,7 @@ function Library:Window(title, size)
             function Section:Button(bopts)
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Box = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Library.Theme.Background, ZIndex = 7, Parent = Holder })
-                ApplyCelestiteStyle(Box)
+                ApplyLunexStyle(Box)
                 Box.ClipsDescendants = true
 
                 local Label = Create("TextLabel", { Text = bopts.Name or "Button", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 12, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
@@ -1034,7 +1028,7 @@ function Library:Window(title, size)
                 local Label = Create("TextLabel", { Text = topts.Name or "Text Box", Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local Box = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), Position = UDim2.new(0, 0, 0, 16), BackgroundColor3 = Library.Theme.Background, ZIndex = 7, Parent = Holder })
-                ApplyCelestiteStyle(Box)
+                ApplyLunexStyle(Box)
                 local Input = Create("TextBox", { Text = topts.Default or "", PlaceholderText = topts.Placeholder or "...", Size = UDim2.new(1, -10, 1, 0), Position = UDim2.new(0, 5, 0, 0), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.TextBoxes, { Box = Box, Input = Input })
                 Input.FocusLost:Connect(function() if topts.Callback then topts.Callback(Input.Text) end end)
@@ -1051,17 +1045,17 @@ function Library:Window(title, size)
                 local Label = Create("TextLabel", { Text = copts.Name or "Color Picker", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local CPHolder = Create("Frame", { Size = UDim2.new(0, 18, 0, 10), Position = UDim2.new(1, -18, 0, 3), BackgroundColor3 = color, ZIndex = 12, Parent = Holder })
-                ApplyCelestiteStyle(CPHolder)
+                ApplyLunexStyle(CPHolder)
                 local CPBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = CPHolder })
                 local Picker = Create("Frame", { Size = UDim2.new(0, 160, 0, 140), BackgroundColor3 = Library.Theme.DarkBackground, Visible = false, ZIndex = 300, Parent = ScreenGui })
-                ApplyCelestiteStyle(Picker)
+                ApplyLunexStyle(Picker)
                 table.insert(Library.Elements.ColorPickers, { Frame = Holder, Picker = Picker })
 
                 local DragBar = Create("Frame", { Name = "DragBar", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 306, Parent = Picker })
                 MakeDraggable(Picker, DragBar)
 
                 local HueSlider = Create("Frame", { Size = UDim2.new(0, 12, 0, 120), Position = UDim2.new(1, -22, 0, 10), ZIndex = 301, Parent = Picker, Active = true })
-                ApplyCelestiteStyle(HueSlider)
+                ApplyLunexStyle(HueSlider)
                 local HueBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 305, Parent = HueSlider })
                 Create("UIGradient", { Rotation = 90, Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
@@ -1074,7 +1068,7 @@ function Library:Window(title, size)
                 }), Parent = HueSlider })
                 local HueMarker = Create("Frame", { Size = UDim2.new(1, 4, 0, 2), Position = UDim2.new(0, -2, h, 0), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 302, Parent = HueSlider })
                 local SVBox = Create("Frame", { Size = UDim2.new(0, 120, 0, 120), Position = UDim2.new(0, 10, 0, 10), BackgroundColor3 = Color3.fromHSV(h, 1, 1), ZIndex = 301, Parent = Picker, Active = true })
-                ApplyCelestiteStyle(SVBox)
+                ApplyLunexStyle(SVBox)
                 local SVBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 305, Parent = SVBox })
                 local SatGradient = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 302, Parent = SVBox })
                 Create("UIGradient", { Color = ColorSequence.new(Color3.new(1, 1, 1)), Transparency = NumberSequence.new(0, 1), Parent = SatGradient })
@@ -1146,7 +1140,7 @@ function Library:Window(title, size)
                 local state = topts.Default or false
                 local Holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, ZIndex = 6, Parent = ElementList })
                 local Box = Create("Frame", { Size = UDim2.new(0, 10, 0, 10), Position = UDim2.new(0, 0, 0.5, -5), BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
-                ApplyCelestiteStyle(Box)
+                ApplyLunexStyle(Box)
                 local Label = Create("TextLabel", { Text = topts.Name or "Toggle", Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = state and Library.Theme.Text or Library.Theme.InactiveText, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local RightSide = Create("Frame", { Size = UDim2.new(1, -15, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, ZIndex = 10, Parent = Holder })
@@ -1259,14 +1253,14 @@ function Library:Window(title, size)
                     local color = copts.Default or Color3.fromHSV(h, s, v)
                     h, s, v = Color3.toHSV(color)
                     local CPHolder = Create("Frame", { Size = UDim2.new(0, 18, 0, 10), BackgroundColor3 = color, ZIndex = 12, Parent = RightSide })
-                    ApplyCelestiteStyle(CPHolder)
+                    ApplyLunexStyle(CPHolder)
                     local CPBtn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 13, Parent = CPHolder })
                     local Picker = Create("Frame", { Size = UDim2.new(0, 160, 0, 140), BackgroundColor3 = Library.Theme.DarkBackground, Visible = false, ZIndex = 3000, Parent = ScreenGui })
-                    ApplyCelestiteStyle(Picker)
+                    ApplyLunexStyle(Picker)
                     local DragBar2 = Create("Frame", { Name = "DragBar", Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0, ZIndex = 3006, Parent = Picker })
                     MakeDraggable(Picker, DragBar2)
                     local HueSlider = Create("Frame", { Size = UDim2.new(0, 12, 0, 120), Position = UDim2.new(1, -22, 0, 10), ZIndex = 3001, Parent = Picker })
-                    ApplyCelestiteStyle(HueSlider)
+                    ApplyLunexStyle(HueSlider)
                     Create("UIGradient", { Rotation = 90, Color = ColorSequence.new({
                         ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
                         ColorSequenceKeypoint.new(0.167, Color3.fromRGB(255, 255, 0)),
@@ -1278,7 +1272,7 @@ function Library:Window(title, size)
                     }), Parent = HueSlider })
                     local HueMarker = Create("Frame", { Size = UDim2.new(1, 4, 0, 2), Position = UDim2.new(0, -2, h, 0), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 3002, Parent = HueSlider })
                     local SVBox = Create("Frame", { Size = UDim2.new(0, 120, 0, 120), Position = UDim2.new(0, 10, 0, 10), BackgroundColor3 = Color3.fromHSV(h, 1, 1), ZIndex = 3001, Parent = Picker })
-                    ApplyCelestiteStyle(SVBox)
+                    ApplyLunexStyle(SVBox)
                     local SatGradient = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 3002, Parent = SVBox })
                     Create("UIGradient", { Color = ColorSequence.new(Color3.new(1, 1, 1)), Transparency = NumberSequence.new(0, 1), Parent = SatGradient })
                     local ValGradient = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), ZIndex = 3003, Parent = SVBox })
@@ -1376,7 +1370,7 @@ function Library:Window(title, size)
                     BackgroundColor3 = Library.Theme.SectionBackground,
                     BorderSizePixel = 0, ZIndex = 7, Parent = Holder,
                 })
-                ApplyCelestiteStyle(SliderBack)
+                ApplyLunexStyle(SliderBack)
 
                 local SliderFill = Create("Frame", {
                     Name = "Fill",
@@ -1449,7 +1443,7 @@ function Library:Window(title, size)
                 local Label = Create("TextLabel", { Text = dopts.Name, Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7, Parent = Holder, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, Label)
                 local Box = Create("Frame", { Name = "DropdownBox", Size = UDim2.new(1, 0, 0, 18), Position = UDim2.new(0, 0, 0, 15), BackgroundColor3 = Library.Theme.SectionBackground, BorderSizePixel = 0, ZIndex = 7, Parent = Holder })
-                ApplyCelestiteStyle(Box)
+                ApplyLunexStyle(Box)
                 local ValueLabel = Create("TextLabel", { Text = selected, Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 6, 0, 0), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
                 table.insert(Library.Elements.Labels, ValueLabel)
                 local Arrow = Create("TextLabel", { Text = "v", Size = UDim2.new(0, 20, 1, 0), Position = UDim2.new(1, -20, 0, -1), BackgroundTransparency = 1, Font = UI_FONT, TextSize = Library.Config.FontSize, TextColor3 = Library.Theme.Text, TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 8, Parent = Box, TextStrokeTransparency = 0, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
@@ -1473,7 +1467,7 @@ function Library:Window(title, size)
                     Position = UDim2.new(0, 0, 0, 0),
                     ZIndex = 5001, Parent = DropOuter,
                 })
-                ApplyCelestiteStyle(DropInner)
+                ApplyLunexStyle(DropInner)
                 table.insert(Library.Elements.Dropdowns, {
                     Box = Box, Label = Label, ValueLabel = ValueLabel,
                     Arrow = Arrow, Container = DropInner, Buttons = {}
@@ -1735,7 +1729,7 @@ function Library:Window(title, size)
                         BackgroundColor3 = color,
                         ZIndex = 12, Parent = RightSide,
                     })
-                    ApplyCelestiteStyle(CPHolder)
+                    ApplyLunexStyle(CPHolder)
                     local CPBtn = Create("TextButton", {
                         Size = UDim2.new(1, 0, 1, 0),
                         BackgroundTransparency = 1, Text = "",
@@ -1747,7 +1741,7 @@ function Library:Window(title, size)
                         BackgroundColor3 = Library.Theme.DarkBackground,
                         Visible = false, ZIndex = 3000, Parent = ScreenGui,
                     })
-                    ApplyCelestiteStyle(Picker)
+                    ApplyLunexStyle(Picker)
                     table.insert(Library.Elements.ColorPickers, { Frame = Holder, Picker = Picker })
 
                     local DragBar = Create("Frame", {
@@ -1763,7 +1757,7 @@ function Library:Window(title, size)
                         Position = UDim2.new(1, -22, 0, 10),
                         ZIndex = 3001, Parent = Picker,
                     })
-                    ApplyCelestiteStyle(HueSlider)
+                    ApplyLunexStyle(HueSlider)
                     Create("UIGradient", {
                         Rotation = 90,
                         Color = ColorSequence.new({
@@ -1790,7 +1784,7 @@ function Library:Window(title, size)
                         BackgroundColor3 = Color3.fromHSV(h, 1, 1),
                         ZIndex = 3001, Parent = Picker,
                     })
-                    ApplyCelestiteStyle(SVBox)
+                    ApplyLunexStyle(SVBox)
                     local SatGradient = Create("Frame", {
                         Size = UDim2.new(1, 0, 1, 0),
                         BackgroundColor3 = Color3.new(1, 1, 1),
@@ -2009,7 +2003,7 @@ function Library:Window(title, size)
                     BackgroundColor3 = Library.Theme.SectionBackground,
                     BorderSizePixel = 0, ZIndex = 7, Parent = Holder,
                 })
-                ApplyCelestiteStyle(Box)
+                ApplyLunexStyle(Box)
 
                 local ValueLabel = Create("TextLabel", {
                     Text = FormatDisplay(),
@@ -2062,7 +2056,7 @@ function Library:Window(title, size)
                     Position = UDim2.new(0, 0, 0, 0),
                     ZIndex = 5001, Parent = DropOuter,
                 })
-                ApplyCelestiteStyle(DropInner)
+                ApplyLunexStyle(DropInner)
 
                 table.insert(Library.Elements.MultiDropdowns, {
                     Box = Box, Label = Label, ValueLabel = ValueLabel,
@@ -2292,7 +2286,7 @@ function Library:Window(title, size)
                     BackgroundColor3 = Library.Theme.Background,
                     BorderSizePixel = 0, ZIndex = 7, Parent = Block,
                 })
-                ApplyCelestiteStyle(DetailPanel)
+                ApplyLunexStyle(DetailPanel)
                 table.insert(Library.Elements.PlayerListDetails, DetailPanel)
 
                 local Thumb = Create("ImageLabel", {
@@ -2348,7 +2342,7 @@ function Library:Window(title, size)
                         LayoutOrder = order, ZIndex = 10,
                         Parent = ButtonsCol, ClipsDescendants = true,
                     })
-                    ApplyCelestiteStyle(Btn)
+                    ApplyLunexStyle(Btn)
                     Create("TextLabel", {
                         Text = text, Size = UDim2.new(1, 0, 1, 0),
                         BackgroundTransparency = 1, Font = UI_FONT,
@@ -2552,17 +2546,15 @@ function Library:Window(title, size)
         function Tab:Configs(side, folderName)
             local ConfigSection = Tab:Section("Configuration", side or "Left")
 
-            -- Folder name WITHOUT trailing slash (for isfolder / makefolder / listfiles)
             local FolderName = tostring(folderName or Library:GetConfigFolder())
             FolderName = FolderName:gsub("[^%w_%-%. ]", ""):gsub("%s+", "_"):gsub("[/\\]+$", "")
-            if FolderName == "" then FolderName = "celestite" end
+            if FolderName == "" then FolderName = "lunex" end
 
             if not isfolder(FolderName) then
                 local ok = pcall(function() makefolder(FolderName) end)
-                if not ok then warn("[Celestite] Could not create config folder: " .. FolderName) end
+                if not ok then warn("[Lunex] Could not create config folder: " .. FolderName) end
             end
 
-            -- Path WITH trailing slash (for writefile / readfile / delfile)
             local ConfigPath = FolderName .. "/"
 
             local ConfigName = ""
@@ -2572,19 +2564,17 @@ function Library:Window(title, size)
             local function Refresh()
                 local names = {}
                 local ok, err = pcall(function()
-                    -- listfiles needs the folder name WITHOUT trailing slash
                     local files = listfiles(FolderName) or {}
                     for _, file in ipairs(files) do
                         local name = file:match("([^/\\]+)$") or file
-                        -- only include .cfg files
                         if name:lower():sub(-4) == ".cfg" then
-                            name = name:sub(1, -5)   -- strip ".cfg"
+                            name = name:sub(1, -5)
                             names[#names + 1] = name
                         end
                     end
                 end)
                 if not ok then
-                    warn("[Celestite] listfiles failed: " .. tostring(err))
+                    warn("[Lunex] listfiles failed: " .. tostring(err))
                 end
                 ConfigList:Refresh(names)
             end
@@ -2596,7 +2586,6 @@ function Library:Window(title, size)
                 local nameToSave = NameBox.GetText()
                 if nameToSave == nil or nameToSave == "" then return end
 
-                -- Strip illegal filename characters
                 nameToSave = tostring(nameToSave):gsub("[^%w_%-%. ]", ""):gsub("%s+", "_")
                 if nameToSave == "" then
                     Library:Notification({ Text = "Invalid config name", Duration = 2 })
@@ -2620,7 +2609,6 @@ function Library:Window(title, size)
                     Library:Notification({ Text = "Save failed (writefile error)", Duration = 3 })
                 end
 
-                -- Give the executor a beat to flush to disk before listing
                 task.wait(0.15)
                 Refresh()
             end })
@@ -2700,7 +2688,7 @@ function Library:Window(title, size)
         ZIndex = 10000,
         Parent = ScreenGui,
     })
-    ApplyCelestiteStyle(ToggleBtn)
+    ApplyLunexStyle(ToggleBtn)
     table.insert(Library.Elements.ToggleBtns, ToggleBtn)
 
     local ToggleStripe = Create("Frame", {
@@ -2772,14 +2760,14 @@ function Library:Window(title, size)
     local Watermark = Create("Frame", {
         Name = "Watermark",
         AnchorPoint = Vector2.new(1, 0),
-        Size = UDim2.new(0, MeasureWatermarkWidth("Celestite"), 0, WM_HEIGHT),
+        Size = UDim2.new(0, MeasureWatermarkWidth("Lunex"), 0, WM_HEIGHT),
         Position = UDim2.new(1, -20, 0, 20),
         BackgroundColor3 = Library.Theme.Background,
         BorderSizePixel = 0,
         ZIndex = 9999,
         Parent = ScreenGui,
     })
-    ApplyCelestiteStyle(Watermark)
+    ApplyLunexStyle(Watermark)
     table.insert(Library.Elements.Watermarks, Watermark)
 
     local WmAccent = Create("Frame", {
@@ -2795,7 +2783,7 @@ function Library:Window(title, size)
 
     local WmLabel = Create("TextLabel", {
         Name = "Label",
-        Text = "Celestite",
+        Text = "Lunex",
         Size = UDim2.new(1, 0, 1, 0),
         BackgroundTransparency = 1,
         Font = UI_FONT,
