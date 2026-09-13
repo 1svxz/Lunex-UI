@@ -1,5 +1,5 @@
 --[[
-    Celestite UI Library - V2.22 (Full)
+    Celestite UI Library - V2.23 (Full)
     • Font: Enum.Font.SourceSansBold (built-in, no downloads)
     • Dropdown race-condition fix
     • Auto-sizing toggle button (default "UI Toggle")
@@ -11,9 +11,15 @@
     • V2.19: Added Divider, Label (+ColorPicker / +Keybind), MultiDropdown
     • V2.20: Dropdowns close on tab switch, snap-update on drag,
              MultiDropdown styled like single Dropdown (no checkboxes)
-    • V2.21: Config folder is configurable + .cfg plaintext format (no JSON)
-    • V2.22: Only one dropdown open at a time — opening a new one closes
-             any previously-open dropdown (single + multi + popups)
+    • V2.21: Config folder configurable + .cfg plaintext format (no JSON)
+    • V2.22: Only one dropdown open at a time
+    • V2.23: Fixed saved-configs dropdown not listing files
+             - folder is created immediately on SetConfigFolder
+             - listfiles uses folder name WITHOUT trailing slash
+             - filenames sanitized before write
+             - save/delete wait for disk flush before refresh
+             - .cfg extension filter
+             - errors surface via warn()
 ]]
 
 local Players      = game:GetService("Players")
@@ -194,8 +200,13 @@ Library.OpenPopups = {}
 function Library:SetConfigFolder(name)
     name = tostring(name or "celestite")
     name = name:gsub("[^%w_%-%. ]", ""):gsub("%s+", "_")
+    name = name:gsub("[/\\]+$", "")       -- strip trailing slashes
     if name == "" then name = "celestite" end
     self.Config.ConfigFolder = name
+    -- Create the folder immediately so save/list works without waiting
+    pcall(function()
+        if not isfolder(name) then makefolder(name) end
+    end)
 end
 
 function Library:GetConfigFolder()
@@ -203,7 +214,8 @@ function Library:GetConfigFolder()
 end
 
 function Library:GetConfigPath()
-    return self:GetConfigFolder() .. "/"
+    local folder = self:GetConfigFolder():gsub("[/\\]+$", "")
+    return folder .. "/"
 end
 
 -- ─── Config value (de)serialization (plaintext, no JSON) ───
@@ -272,17 +284,21 @@ function Library:WriteConfigFile(name, data)
             lines[#lines + 1] = k .. " = " .. SerializeValue(v)
         end
     end
-    local ok = pcall(function()
+    local ok, err = pcall(function()
         writefile(path, table.concat(lines, "\n"))
     end)
+    if not ok then warn("[Celestite] WriteConfigFile failed: " .. tostring(err)) end
     return ok
 end
 
 function Library:ReadConfigFile(name)
     local path = self:GetConfigPath() .. tostring(name) .. ".cfg"
     local content
-    local ok = pcall(function() content = readfile(path) end)
-    if not ok or not content then return nil end
+    local ok, err = pcall(function() content = readfile(path) end)
+    if not ok or not content then
+        warn("[Celestite] ReadConfigFile failed: " .. tostring(err))
+        return nil
+    end
 
     local data = { Theme = {}, Flags = {} }
     local section = nil
@@ -2535,8 +2551,19 @@ function Library:Window(title, size)
 
         function Tab:Configs(side, folderName)
             local ConfigSection = Tab:Section("Configuration", side or "Left")
-            local ConfigPath = (folderName or Library:GetConfigFolder()) .. "/"
-            if not isfolder(ConfigPath) then makefolder(ConfigPath) end
+
+            -- Folder name WITHOUT trailing slash (for isfolder / makefolder / listfiles)
+            local FolderName = tostring(folderName or Library:GetConfigFolder())
+            FolderName = FolderName:gsub("[^%w_%-%. ]", ""):gsub("%s+", "_"):gsub("[/\\]+$", "")
+            if FolderName == "" then FolderName = "celestite" end
+
+            if not isfolder(FolderName) then
+                local ok = pcall(function() makefolder(FolderName) end)
+                if not ok then warn("[Celestite] Could not create config folder: " .. FolderName) end
+            end
+
+            -- Path WITH trailing slash (for writefile / readfile / delfile)
+            local ConfigPath = FolderName .. "/"
 
             local ConfigName = ""
             local NameBox = ConfigSection:TextBox({ Name = "Config Name", Placeholder = "...", Callback = function(v) ConfigName = v end })
@@ -2544,14 +2571,21 @@ function Library:Window(title, size)
 
             local function Refresh()
                 local names = {}
-                pcall(function()
-                    local files = listfiles(ConfigPath)
-                    for _, file in pairs(files) do
+                local ok, err = pcall(function()
+                    -- listfiles needs the folder name WITHOUT trailing slash
+                    local files = listfiles(FolderName) or {}
+                    for _, file in ipairs(files) do
                         local name = file:match("([^/\\]+)$") or file
-                        name = name:gsub("%.cfg$", ""):gsub("%.CFG$", "")
-                        names[#names + 1] = name
+                        -- only include .cfg files
+                        if name:lower():sub(-4) == ".cfg" then
+                            name = name:sub(1, -5)   -- strip ".cfg"
+                            names[#names + 1] = name
+                        end
                     end
                 end)
+                if not ok then
+                    warn("[Celestite] listfiles failed: " .. tostring(err))
+                end
                 ConfigList:Refresh(names)
             end
 
@@ -2561,6 +2595,14 @@ function Library:Window(title, size)
             ConfigSection:Button({ Name = "Save Config", Callback = function()
                 local nameToSave = NameBox.GetText()
                 if nameToSave == nil or nameToSave == "" then return end
+
+                -- Strip illegal filename characters
+                nameToSave = tostring(nameToSave):gsub("[^%w_%-%. ]", ""):gsub("%s+", "_")
+                if nameToSave == "" then
+                    Library:Notification({ Text = "Invalid config name", Duration = 2 })
+                    return
+                end
+
                 local data = { Theme = {}, Flags = {} }
                 for k, v in pairs(Library.Theme) do
                     if typeof(v) == "Color3" then data.Theme[k] = v end
@@ -2575,9 +2617,11 @@ function Library:Window(title, size)
                 if ok then
                     Library:Notification({ Text = "Saved: " .. nameToSave, Duration = 2 })
                 else
-                    Library:Notification({ Text = "Save failed", Duration = 2 })
+                    Library:Notification({ Text = "Save failed (writefile error)", Duration = 3 })
                 end
-                task.wait()
+
+                -- Give the executor a beat to flush to disk before listing
+                task.wait(0.15)
                 Refresh()
             end })
 
@@ -2604,8 +2648,13 @@ function Library:Window(title, size)
             ConfigSection:Button({ Name = "Delete Config", Callback = function()
                 local selected = ConfigList:Get()
                 if not selected or selected == "" then return end
-                pcall(function() delfile(ConfigPath .. selected .. ".cfg") end)
-                Library:Notification({ Text = "Deleted: " .. selected, Duration = 2 })
+                local ok = pcall(function() delfile(ConfigPath .. selected .. ".cfg") end)
+                if ok then
+                    Library:Notification({ Text = "Deleted: " .. selected, Duration = 2 })
+                else
+                    Library:Notification({ Text = "Delete failed", Duration = 2 })
+                end
+                task.wait(0.15)
                 Refresh()
             end })
 
